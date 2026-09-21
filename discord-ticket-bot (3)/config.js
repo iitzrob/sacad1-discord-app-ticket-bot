@@ -23,7 +23,7 @@ module.exports = {
   // result (found/not found, with a jump-to-win button) gets posted in the
   // ticket automatically.
   giveawayCheck: {
-    channels: ["1456051574056026112", "1505822932327202816", "1477093104849912008"], // the channels your giveaway/tracker bot posts wins in
+    channels: ["1456051574056026112", "1505822932327202816", "1477093104849912008, "1456051574056026112"], // the channels your giveaway/tracker bot posts wins in
     botId: "", // optional — only check messages from this bot's user ID; leave "" to check every message in those channels
     searchLimit: 500 // how many recent messages to scan per channel (clamped 50-5000)
   },
