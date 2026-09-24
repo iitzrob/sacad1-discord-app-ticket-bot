@@ -1,6 +1,9 @@
 const fs = require("fs");
 const path = require("path");
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const {
+  ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags
+} = require("discord.js");
 const { isStaff } = require("./utils");
 
 // JSON-file-backed, same pattern as locks.js/ticketActivity.js — needs to
@@ -44,36 +47,48 @@ function getKicks(channelId) {
 }
 
 // ---------------------------------------------------------------------
-// Panel embed + the disabled "Kicks: N" button
+// Panel — built with Components V2 (real Container/Separator components,
+// not text embeds), plus the disabled "Kicks: N" button.
 // ---------------------------------------------------------------------
-function buildHoneypotEmbed(kicks) {
-  return new EmbedBuilder()
-    .setColor(0xED4245)
-    .setTitle("🪤 Bot Trap")
-    .setDescription(
-      "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n" +
-      "🚫 **Do not post here**\n" +
-      "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n\n" +
-      "This channel is a trap for self-bots and spam scripts.\n\n" +
-      "☠️ Anyone who sends a message here is **soft-banned** — this bans " +
-      "you from the server for **7 days** and deletes your messages from " +
-      "the past 7 days.\n\n" +
-      "No reason to type here."
-    )
-    .setFooter({ text: "👀 Type here if you dare" });
-}
+function buildHoneypotContainer(kicks) {
+  const kicksButton = new ButtonBuilder()
+    .setCustomId("honeypot_kicks")
+    .setLabel(`Kicks: ${kicks}`)
+    .setStyle(ButtonStyle.Danger)
+    .setDisabled(true);
 
-function buildHoneypotComponents(kicks) {
-  return [
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("honeypot_kicks")
-        .setLabel(`Kicks: ${kicks}`)
-        .setEmoji("🔨")
-        .setStyle(ButtonStyle.Danger)
-        .setDisabled(true)
+  return new ContainerBuilder()
+    .setAccentColor(0xED4245)
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent("# 🪤 Bot Trap")
     )
-  ];
+    .addSeparatorComponents(
+      new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small)
+    )
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent("**Do not post here**")
+    )
+    .addSeparatorComponents(
+      new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small)
+    )
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(
+        "This channel is a trap for self-bots and spam scripts.\n\n" +
+        "Anyone who sends a message here is **soft-banned** — this bans " +
+        "you from the server for **7 days** and deletes your messages from " +
+        "the past 7 days.\n\n" +
+        "No reason to type here."
+      )
+    )
+    .addSeparatorComponents(
+      new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small)
+    )
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent("-# Type here if you dare")
+    )
+    .addActionRowComponents(
+      new ActionRowBuilder().addComponents(kicksButton)
+    );
 }
 
 async function sendHoneypotPanel(channel) {
@@ -81,8 +96,8 @@ async function sendHoneypotPanel(channel) {
   const kicks = existing?.kicks ?? 0;
 
   const message = await channel.send({
-    embeds: [buildHoneypotEmbed(kicks)],
-    components: buildHoneypotComponents(kicks)
+    flags: MessageFlags.IsComponentsV2,
+    components: [buildHoneypotContainer(kicks)]
   });
 
   data.channels[channel.id] = { guildId: channel.guild.id, messageId: message.id, kicks };
@@ -94,8 +109,8 @@ async function refreshHoneypotPanel(channel, entry) {
   try {
     const message = await channel.messages.fetch(entry.messageId);
     await message.edit({
-      embeds: [buildHoneypotEmbed(entry.kicks)],
-      components: buildHoneypotComponents(entry.kicks)
+      flags: MessageFlags.IsComponentsV2,
+      components: [buildHoneypotContainer(entry.kicks)]
     });
   } catch (err) {
     console.error(`Failed to refresh honeypot panel in #${channel.name ?? channel.id}:`, err);
