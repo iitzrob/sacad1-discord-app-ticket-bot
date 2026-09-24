@@ -29,6 +29,7 @@ const {
   createTracker, recordTrackerEvent, stopTracker, startWeeklyResetScheduler
 } = require("./tracker");
 const { getLockSnapshot, setLockSnapshot, deleteLockSnapshot } = require("./locks");
+const { handleHoneypotMessage, checkExpiredHoneypotBans } = require("./honeypot");
 const { touchActivity, getLastActivity, deleteActivity } = require("./ticketActivity");
 const {
   buildStepOneComponents: buildTrackerStepOneComponents,
@@ -302,6 +303,14 @@ client.once("ready", () => {
   setInterval(() => {
     checkAutoCloseTickets().catch(err => console.error("Auto-close check failed:", err));
   }, autoCloseIntervalMs);
+
+  // Honeypot — unban anyone whose 7-day trap ban has expired. Discord has
+  // no native temp ban, so this is just a timestamp checked on a timer,
+  // same shape as the auto-close scheduler above.
+  checkExpiredHoneypotBans(client).catch(err => console.error("Initial honeypot unban check failed:", err));
+  setInterval(() => {
+    checkExpiredHoneypotBans(client).catch(err => console.error("Honeypot unban check failed:", err));
+  }, 15 * 60 * 1000);
 });
 
 // =====================================================================
@@ -1022,6 +1031,16 @@ client.on("messageCreate", message => {
   if (message.author.bot) return;
   if (!message.guild) return;
   handleMessageForSticky(message).catch(err => console.error("Sticky repost failed:", err));
+});
+
+// =====================================================================
+// HONEYPOT / BOT TRAP — anyone (other than staff) who sends a message in
+// a channel a /honey-pot panel was sent to gets temp-banned for 7 days,
+// with their last 7 days of messages purged. No-ops instantly unless the
+// channel is a registered trap. See honeypot.js.
+// =====================================================================
+client.on("messageCreate", message => {
+  handleHoneypotMessage(message).catch(err => console.error("Honeypot handling failed:", err));
 });
 
 // =====================================================================
