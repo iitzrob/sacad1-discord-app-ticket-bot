@@ -10,7 +10,8 @@ const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 //
 // The person starting the game can optionally set:
 //   max      -> the top of the number range (always starts at 1), 1-1500
-//   time     -> how many seconds the game runs for, 5-600
+//   time     -> how long the game runs for, written like 30s / 5m / 1h,
+//               capped at 1h
 // =====================================================================
 
 const MIN_NUMBER = 1;
@@ -18,10 +19,32 @@ const DEFAULT_MAX_NUMBER = 100;
 const MAX_NUMBER_LIMIT = 1500;
 
 const DEFAULT_GAME_TIMEOUT_MS = 60_000;
-const MIN_TIMEOUT_SECONDS = 5;
-const MAX_TIMEOUT_SECONDS = 600; // 10 minutes
+const MIN_TIMEOUT_SECONDS = 1;
+const MAX_TIMEOUT_SECONDS = 3_600; // 1 hour
 
 const CHANNEL_COOLDOWN_MS = 10_000;
+
+// Parses a duration string like "45s", "5m", "1h" (or a bare number of
+// seconds, e.g. "90") into whole seconds. Returns null if it can't parse.
+function parseDurationToSeconds(input) {
+  if (input == null) return null;
+  const trimmed = String(input).trim().toLowerCase();
+
+  // Bare number -> treat as seconds
+  if (/^\d+$/.test(trimmed)) {
+    return parseInt(trimmed, 10);
+  }
+
+  const match = trimmed.match(/^(\d+)\s*(s|m|h)$/);
+  if (!match) return null;
+
+  const amount = parseInt(match[1], 10);
+  const unit = match[2];
+  if (unit === "s") return amount;
+  if (unit === "m") return amount * 60;
+  if (unit === "h") return amount * 3600;
+  return null;
+}
 
 const UP_EMOJI = "🔼";
 const DOWN_EMOJI = "🔽";
@@ -36,6 +59,14 @@ const activeGames = new Map();
 // channelId -> timestamp a new game can start
 const channelCooldowns = new Map();
 
+// Formats a whole number of seconds back into a compact "1h", "5m", "45s"
+// style string for display.
+function formatDuration(totalSeconds) {
+  if (totalSeconds % 3600 === 0) return `${totalSeconds / 3600}h`;
+  if (totalSeconds % 60 === 0) return `${totalSeconds / 60}m`;
+  return `${totalSeconds}s`;
+}
+
 function gameEmbed({ low, high, guessCount, guesserCount, timeoutMs }) {
   return new EmbedBuilder()
     .setColor(COLOR_IDLE)
@@ -45,7 +76,7 @@ function gameEmbed({ low, high, guessCount, guesserCount, timeoutMs }) {
       { name: "Range", value: `**${low} – ${high}**`, inline: true },
       { name: "Guesses so far", value: `${guessCount} (from ${guesserCount})`, inline: true },
     )
-    .setFooter({ text: `Game ends in ${Math.round(timeoutMs / 1000)}s if nobody gets it` });
+    .setFooter({ text: `Game ends in ${formatDuration(Math.round(timeoutMs / 1000))} if nobody gets it` });
 }
 
 function wonEmbed({ winnerMention, answer, guessCount, guesserCount }) {
@@ -81,12 +112,11 @@ module.exports = {
         .setMaxValue(MAX_NUMBER_LIMIT)
         .setRequired(false)
     )
-    .addIntegerOption((option) =>
+    .addStringOption((option) =>
       option
         .setName("time")
-        .setDescription(`How long the game runs, in seconds (${MIN_TIMEOUT_SECONDS}-${MAX_TIMEOUT_SECONDS}). Default 60.`)
-        .setMinValue(MIN_TIMEOUT_SECONDS)
-        .setMaxValue(MAX_TIMEOUT_SECONDS)
+        .setDescription(`How long the game runs — e.g. 30s, 5m, 1h. Max 1h. Default 1m.`)
+        .setMaxLength(8)
         .setRequired(false)
     ),
 
@@ -111,19 +141,33 @@ module.exports = {
     }
 
     // Resolve the per-game settings. Discord's built-in min/max on the
-    // options already stop out-of-range input at the client, but we clamp
-    // again here as a safety net in case this is ever called another way.
+    // "max" option already stops out-of-range input at the client, but we
+    // clamp again here as a safety net in case this is ever called another way.
     const maxNumber = Math.min(
       MAX_NUMBER_LIMIT,
       Math.max(MIN_NUMBER, interaction.options.getInteger("max") ?? DEFAULT_MAX_NUMBER)
     );
-    const timeoutSeconds = Math.min(
-      MAX_TIMEOUT_SECONDS,
-      Math.max(
-        MIN_TIMEOUT_SECONDS,
-        interaction.options.getInteger("time") ?? DEFAULT_GAME_TIMEOUT_MS / 1000
-      )
-    );
+
+    const rawTime = interaction.options.getString("time");
+    let timeoutSeconds = DEFAULT_GAME_TIMEOUT_MS / 1000;
+
+    if (rawTime !== null) {
+      const parsedSeconds = parseDurationToSeconds(rawTime);
+      if (parsedSeconds === null) {
+        return interaction.reply({
+          content: `Couldn't read "${rawTime}" as a time. Use something like \`30s\`, \`5m\`, or \`1h\` (max 1h).`,
+          ephemeral: true,
+        });
+      }
+      if (parsedSeconds < MIN_TIMEOUT_SECONDS || parsedSeconds > MAX_TIMEOUT_SECONDS) {
+        return interaction.reply({
+          content: `Time has to be between ${MIN_TIMEOUT_SECONDS}s and 1h — try something like \`30s\`, \`5m\`, or \`1h\`.`,
+          ephemeral: true,
+        });
+      }
+      timeoutSeconds = parsedSeconds;
+    }
+
     const gameTimeoutMs = timeoutSeconds * 1000;
 
     activeGames.set(channel.id, true);
