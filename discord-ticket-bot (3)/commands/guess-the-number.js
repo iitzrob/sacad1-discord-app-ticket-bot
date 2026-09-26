@@ -46,8 +46,7 @@ function parseDurationToSeconds(input) {
   return null;
 }
 
-const UP_EMOJI = "🔼";
-const DOWN_EMOJI = "🔽";
+const WRONG_EMOJI = "❌";
 const CORRECT_EMOJI = "✅";
 
 const COLOR_IDLE = 0x8b5cf6; // sacad house purple
@@ -202,6 +201,7 @@ module.exports = {
         won = true;
         collector.stop("won");
         await m.react(CORRECT_EMOJI).catch(() => {});
+        await m.reply({ content: "🎉 Congrats you guessed the number!!" }).catch(() => {});
         await gameMessage
           .edit({
             embeds: [
@@ -219,11 +219,10 @@ module.exports = {
 
       if (guess < answer) {
         low = Math.max(low, guess + 1);
-        await m.react(UP_EMOJI).catch(() => {});
       } else {
         high = Math.min(high, guess - 1);
-        await m.react(DOWN_EMOJI).catch(() => {});
       }
+      await m.react(WRONG_EMOJI).catch(() => {});
 
       await gameMessage
         .edit({ embeds: [gameEmbed({ low, high, guessCount, guesserCount: guessers.size, timeoutMs: gameTimeoutMs })] })
