@@ -4,7 +4,7 @@ const { SlashCommandBuilder } = require("discord.js");
 const { isStaff } = require("../utils");
 
 // /partnership ping — staff only, only in one channel, once every 2 hours.
-// Pings a role + @here.
+// You pick what to ping: @here or the partnership role. One shared cooldown.
 const PING_ROLE = "1480173363195285696";
 const ALLOWED_CHANNEL = "1480180234400694313";
 const COOLDOWN_MS = 2 * 60 * 60 * 1000;
@@ -31,7 +31,16 @@ module.exports = {
     .setName("partnership")
     .setDescription("Partnership tools — staff only")
     .addSubcommand(s =>
-      s.setName("ping").setDescription("Ping the partnership role + @here (once every 2 hours)")),
+      s.setName("ping")
+        .setDescription("Ping @here or the partnership role (once every 2 hours)")
+        .addStringOption(o =>
+          o.setName("who")
+            .setDescription("What to ping")
+            .setRequired(true)
+            .addChoices(
+              { name: "@here", value: "here" },
+              { name: "Partnership role", value: "role" }
+            ))),
 
   async execute(interaction) {
     if (!interaction.guild || !isStaff(interaction.member)) {
@@ -44,6 +53,10 @@ module.exports = {
     if (ch.id !== ALLOWED_CHANNEL) {
       return interaction.reply({ content: "You can't use this command in this channel.", flags: 64 });
     }
+
+    const who = interaction.options.getString("who");
+    const content = who === "here" ? "@here" : `<@&${PING_ROLE}>`;
+    const allowedMentions = who === "here" ? { parse: ["everyone"] } : { roles: [PING_ROLE] };
 
     const last = readLast();
     const readyAt = last + COOLDOWN_MS;
@@ -58,10 +71,7 @@ module.exports = {
     writeLast(Date.now());
     try {
       // parse: ["everyone"] is what lets @here actually ping; the bot needs Mention Everyone.
-      await ch.send({
-        content: `<@&${PING_ROLE}> @here`,
-        allowedMentions: { roles: [PING_ROLE], parse: ["everyone"] }
-      });
+      await ch.send({ content, allowedMentions });
     } catch (err) {
       console.error("Partnership ping failed:", err);
       writeLast(last); // it didn't send, so give the cooldown back
