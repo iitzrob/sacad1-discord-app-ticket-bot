@@ -23,11 +23,11 @@ const { formatMoney } = require("./stats");
 //   lastResetDateKey: "YYYY-MM-DD" // Sydney-local date the weekly reset last ran, so we don't double-fire
 // }
 //
-// ONE embed, everyone's own card inside it:
-// Everything lives in a single message — one embed with one field per
-// tracked user, so each person still gets their own little section (claims/
-// closes/renames/sponsored), it's just all inside the one embed instead of
-// spread across separate messages.
+// TWO embeds in one message:
+// Everything lives in a single message — two embeds with one field per
+// tracked user (split across the two), so each person still gets their own
+// little section (claims/closes/renames/sponsored). The second embed also
+// has a Team Totals field.
 //
 // Ping caveat: Discord only fires an @mention NOTIFICATION for a mention
 // sitting in a message's plain CONTENT — never for one inside an embed
@@ -36,9 +36,8 @@ const { formatMoney } = require("./stats");
 // tracker never pings or DMs anyone — it's a purely visual, self-updating
 // embed.
 //
-// Embeds cap out at 25 fields. If a tracker somehow ends up with more than
-// 25 users (e.g. a big role was selected), only the first 25 get a field
-// and a note is added saying the rest are tracked but not shown.
+// Embeds cap out at 25 fields each. With two embeds up to 48 users are shown;
+// if a tracker has more than that, a note says the rest are tracked but not shown.
 // =====================================================================
 const DATA_FILE = path.join(__dirname, "data", "trackers.json");
 const MAX_FIELDS = 25;
@@ -94,49 +93,92 @@ async function resolveDisplayName(client, guildId, userId) {
 }
 
 // =====================================================================
-// EMBED
+// EMBEDS — the tracker message now carries TWO embeds (still one message,
+// so nothing changes for messageId / editing / pings):
+//   Embed 1: title + info + the first half of the tracked users
+//   Embed 2: the second half of the tracked users + a Team Totals field
+// Each embed can hold 25 fields, so up to 48 users are shown (25 in the
+// first, 23 in the second + totals + an overflow note if needed).
 // =====================================================================
-async function buildTrackerEmbed(client, tracker, { stopped = false } = {}) {
-  const weekStartUnix = Math.floor(new Date(tracker.weekStart).getTime() / 1000);
-  const shown = tracker.users.slice(0, MAX_FIELDS);
-  const overflow = tracker.users.length - shown.length;
+const EMBED1_MAX = 25;
+const EMBED2_MAX = 23;
 
-  const embed = new EmbedBuilder()
-    .setColor(stopped ? "#F04747" : "#8B5CF6")
+async function buildTrackerEmbeds(client, tracker, { stopped = false } = {}) {
+  const weekStartUnix = Math.floor(new Date(tracker.weekStart).getTime() / 1000);
+  const total = tracker.users.length;
+  const color = stopped ? "#F04747" : "#8B5CF6";
+
+  // Split as evenly as possible, first embed gets the extra one.
+  const firstCount = Math.min(EMBED1_MAX, Math.ceil(total / 2));
+  const secondCount = Math.min(EMBED2_MAX, total - firstCount);
+  const first = tracker.users.slice(0, firstCount);
+  const second = tracker.users.slice(firstCount, firstCount + secondCount);
+  const overflow = total - first.length - second.length;
+
+  const names = await Promise.all(
+    [...first, ...second].map(userId => resolveDisplayName(client, tracker.guildId, userId))
+  );
+
+  const card = userId => {
+    const s = tracker.stats[userId] || blankStats();
+    return (
+      `🤝 Claims: **${s.claims}**\n` +
+      `🔒 Closes: **${s.closes}**\n` +
+      `✏️ Renames: **${s.renames}**\n` +
+      `💸 Sponsored: **$${formatMoney(s.sponsors)}**`
+    );
+  };
+
+  const embed1 = new EmbedBuilder()
+    .setColor(color)
     .setTitle(stopped ? "📊 Weekly Activity Tracker — Stopped" : "📊 Weekly Activity Tracker")
     .setDescription(
-      `Tracking **${tracker.users.length}** user(s) • updates live below\n` +
+      `Tracking **${total}** user(s) • updates live below\n` +
       `Week started <t:${weekStartUnix}:D> • resets every **Sunday at midnight (Sydney time)**`
-    )
+    );
+
+  first.forEach((userId, i) => {
+    embed1.addFields({ name: names[i], value: card(userId), inline: true });
+  });
+
+  // Team totals across everyone tracked (not just the ones shown).
+  const totals = tracker.users.reduce((acc, userId) => {
+    const s = tracker.stats[userId] || blankStats();
+    acc.claims += s.claims;
+    acc.closes += s.closes;
+    acc.renames += s.renames;
+    acc.sponsors += s.sponsors;
+    return acc;
+  }, blankStats());
+
+  const embed2 = new EmbedBuilder()
+    .setColor(color)
     .setFooter({ text: `Tracker ID: ${tracker.id}` })
     .setTimestamp();
 
-  // Names are looked up in parallel rather than one at a time so this
-  // doesn't get slow on trackers with a lot of people in them.
-  const names = await Promise.all(shown.map(userId => resolveDisplayName(client, tracker.guildId, userId)));
-
-  shown.forEach((userId, i) => {
-    const s = tracker.stats[userId] || blankStats();
-    embed.addFields({
-      name: names[i],
-      value:
-        `🤝 Claims: **${s.claims}**\n` +
-        `🔒 Closes: **${s.closes}**\n` +
-        `✏️ Renames: **${s.renames}**\n` +
-        `💸 Sponsored: **$${formatMoney(s.sponsors)}**`,
-      inline: true
-    });
+  second.forEach((userId, i) => {
+    embed2.addFields({ name: names[first.length + i], value: card(userId), inline: true });
   });
 
   if (overflow > 0) {
-    embed.addFields({
+    embed2.addFields({
       name: "⚠️ Not shown",
-      value: `${overflow} more tracked user(s) — an embed can only display ${MAX_FIELDS} fields. Split this into more than one tracker to see everyone.`,
+      value: `${overflow} more tracked user(s) — two embeds can only display ${EMBED1_MAX + EMBED2_MAX} users. Split this into more than one tracker to see everyone.`,
       inline: false
     });
   }
 
-  return embed;
+  embed2.addFields({
+    name: "📈 Team Totals",
+    value:
+      `🤝 Claims: **${totals.claims}**\n` +
+      `🔒 Closes: **${totals.closes}**\n` +
+      `✏️ Renames: **${totals.renames}**\n` +
+      `💸 Sponsored: **$${formatMoney(totals.sponsors)}**`,
+    inline: false
+  });
+
+  return [embed1, embed2];
 }
 
 async function refreshTrackerMessage(client, tracker, opts = {}) {
@@ -145,7 +187,7 @@ async function refreshTrackerMessage(client, tracker, opts = {}) {
     const message = await channel.messages.fetch(tracker.messageId);
     // Only the embed is touched — the content (the original pings) is left
     // exactly as it was, so a stats update or a stop never re-pings anyone.
-    await message.edit({ embeds: [await buildTrackerEmbed(client, tracker, opts)] });
+    await message.edit({ embeds: await buildTrackerEmbeds(client, tracker, opts) });
   } catch {
     console.warn(`⚠️  Couldn't refresh tracker ${tracker.id} — its message or channel may have been deleted.`);
   }
@@ -172,7 +214,7 @@ async function createTracker(client, guild, channelId, userIds, createdBy) {
   // Single message, no pings — just the one combined embed with everyone's
   // own field inside it. Nobody gets DM'd/notified when the tracker starts.
   const message = await channel.send({
-    embeds: [await buildTrackerEmbed(client, tracker)]
+    embeds: await buildTrackerEmbeds(client, tracker)
   });
   tracker.messageId = message.id;
 
