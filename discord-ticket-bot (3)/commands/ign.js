@@ -81,12 +81,11 @@ function removeIGN(userId) {
   return entry;
 }
 
-// Every linked user as [{ userId, ign }] — used by /linked-users.
+// Every linked user as [{ userId, ign, originalName }] (used by /linked-users).
 function getAll() {
-  return Object.entries(data).map(([userId, entry]) => ({
-    userId,
-    ign: typeof entry === "string" ? entry : entry.ign
-  }));
+  return Object.keys(data)
+    .map(userId => getEntry(userId) && { userId, ...getEntry(userId) })
+    .filter(Boolean);
 }
 
 async function sendIGNPanel(channel) {
@@ -131,4 +130,4 @@ async function logIGNEvent(guild, { action, user, ign, previousIgn, actionBy }) 
   await channel.send({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => {});
 }
 
-module.exports = { getIGN, getOriginalName, getAll, findByIGN, setIGN, removeIGN, sendIGNPanel, logIGNEvent };
+module.exports = { getAll, getIGN, getOriginalName, findByIGN, setIGN, removeIGN, sendIGNPanel, logIGNEvent };
