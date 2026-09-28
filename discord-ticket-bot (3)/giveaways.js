@@ -23,11 +23,29 @@ const MAX_WINNERS = 25;
 const MAX_DURATION_MS = 52 * 7 * 24 * 60 * 60 * 1000; // 52 weeks
 
 // ---------------------------------------------------------------- storage
+const BACKUP_FILE = DATA_FILE + ".bak";
+
+function readJson(file) {
+  return JSON.parse(fs.readFileSync(file, "utf-8"));
+}
+
+// If giveaways.json is missing we start fresh. If it exists but is unreadable
+// (e.g. cut off by a crash), we keep a copy of it and fall back to the last
+// good backup instead of silently wiping every running giveaway.
 function load() {
+  if (!fs.existsSync(DATA_FILE)) return {};
   try {
-    return JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
-  } catch {
-    return {};
+    return readJson(DATA_FILE);
+  } catch (err) {
+    console.error("giveaways.json is unreadable:", err.message);
+    try { fs.copyFileSync(DATA_FILE, DATA_FILE + ".corrupt-" + Date.now()); } catch {}
+    try {
+      const restored = readJson(BACKUP_FILE);
+      console.warn("Restored giveaways from giveaways.json.bak");
+      return restored;
+    } catch {
+      return {};
+    }
   }
 }
 
@@ -38,6 +56,7 @@ function save() {
     fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
     const tmp = DATA_FILE + ".tmp";
     fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+    if (fs.existsSync(DATA_FILE)) fs.copyFileSync(DATA_FILE, BACKUP_FILE);
     fs.renameSync(tmp, DATA_FILE);
   } catch (err) {
     console.error("Failed to save giveaways.json:", err);
@@ -100,12 +119,20 @@ async function fetchMessage(client, g) {
   return channel.messages.fetch(g.messageId);
 }
 
+// Returns true when the message was updated (or is gone for good, so there is
+// nothing left to retry), false when it failed for a temporary reason.
 async function refreshMessage(client, g) {
   try {
     const message = await fetchMessage(client, g);
     await message.edit({ embeds: [buildEmbed(g)], components: buildComponents(g) });
-  } catch {
-    console.warn(`⚠️  Couldn't update giveaway "${g.prize}" — its message or channel may have been deleted.`);
+    return true;
+  } catch (err) {
+    if (err && (err.code === 10008 || err.code === 10003 || err.code === 50001)) {
+      console.warn(`⚠️  Giveaway "${g.prize}" — its message or channel is gone or not accessible.`);
+      return true;
+    }
+    console.warn(`⚠️  Couldn't update giveaway "${g.prize}" right now, will retry:`, err && err.message);
+    return false;
   }
 }
 
@@ -135,8 +162,12 @@ async function pickWinners(client, g, pool, count) {
   for (const userId of shuffle(pool)) {
     if (winners.length >= count) break;
     if (guild) {
-      const member = await guild.members.fetch(userId).catch(() => null);
-      if (!member) continue;
+      try {
+        await guild.members.fetch(userId);
+      } catch (err) {
+        // 10007 = Unknown Member (they left). Any other error is a hiccup, so keep them.
+        if (err && err.code === 10007) continue;
+      }
     }
     winners.push(userId);
   }
@@ -157,7 +188,8 @@ async function endGiveaway(client, id) {
     if (g.endsAt > g.endedAt) g.endsAt = g.endedAt; // ended early — show the real end time
     save();
 
-    await refreshMessage(client, g);
+    g.needsRefresh = !(await refreshMessage(client, g));
+    save();
 
     try {
       const message = await fetchMessage(client, g);
@@ -187,7 +219,8 @@ async function rerollGiveaway(client, id) {
 
     g.winners = winners;
     save();
-    await refreshMessage(client, g);
+    g.needsRefresh = !(await refreshMessage(client, g));
+    save();
 
     try {
       const message = await fetchMessage(client, g);
@@ -358,6 +391,13 @@ function init(client) {
       for (const g of Object.values(data)) {
         if (!g.ended && now >= g.endsAt) {
           endGiveaway(client, g.id).catch(err => console.error("Giveaway end failed:", err));
+        } else if (g.ended && g.needsRefresh && !busy.has(g.id)) {
+          // The "ended" edit failed earlier (Discord hiccup) — try again.
+          g.needsRefresh = false;
+          refreshMessage(client, g).then(ok => {
+            if (!ok) g.needsRefresh = true;
+            save();
+          });
         }
       }
     }, 1000);
