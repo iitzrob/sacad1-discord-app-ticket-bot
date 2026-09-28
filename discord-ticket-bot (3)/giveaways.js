@@ -83,24 +83,35 @@ function parseDuration(text) {
   return total;
 }
 
-function buildEmbed(g) {
+const FOOTER_TEXT = "Sac's Giveaways";
+
+// Server logo for the footer: live from the guild cache when we can, otherwise the one saved at creation.
+function iconFor(client, g) {
+  try {
+    const guild = client && client.guilds && client.guilds.cache && client.guilds.cache.get(g.guildId);
+    const url = guild && guild.iconURL({ size: 128 });
+    if (url) { g.iconURL = url; return url; }
+  } catch {}
+  return g.iconURL || undefined;
+}
+
+function buildEmbed(g, iconURL) {
   const unix = Math.floor(g.endsAt / 1000);
-  const embed = new EmbedBuilder().setColor(COLOR).setTitle(g.prize);
 
-  if (g.description) embed.setDescription(g.description);
-
-  embed.addFields(
-    { name: g.ended ? "Ended" : "Ends", value: `<t:${unix}:R> (<t:${unix}:f>)`, inline: false },
-    { name: "Hosted by", value: `<@${g.hostId}>`, inline: false },
-    { name: "Entries", value: String(g.entries.length), inline: false },
+  const info = [
+    `**${g.ended ? "Ended" : "Ends"}:** <t:${unix}:R> (<t:${unix}:f>)`,
+    `**Hosted by:** <@${g.hostId}>`,
+    `**Entries:** ${g.entries.length}`,
     g.ended
-      ? {
-          name: "Winner(s)",
-          value: g.winners.length ? g.winners.map(id => `<@${id}>`).join("\n") : "No valid entries",
-          inline: false
-        }
-      : { name: "Winners", value: String(g.winnerCount), inline: false }
-  );
+      ? `**Winner(s):** ${g.winners.length ? g.winners.map(id => `<@${id}>`).join(", ") : "No valid entries"}`
+      : `**Winners:** ${g.winnerCount}`
+  ].join("\n");
+
+  const embed = new EmbedBuilder()
+    .setColor(COLOR)
+    .setTitle(g.prize)
+    .setDescription(g.description ? `${g.description}\n\n${info}` : info)
+    .setFooter(iconURL ? { text: FOOTER_TEXT, iconURL } : { text: FOOTER_TEXT });
 
   return embed;
 }
@@ -124,7 +135,7 @@ async function fetchMessage(client, g) {
 async function refreshMessage(client, g) {
   try {
     const message = await fetchMessage(client, g);
-    await message.edit({ embeds: [buildEmbed(g)], components: buildComponents(g) });
+    await message.edit({ embeds: [buildEmbed(g, iconFor(client, g))], components: buildComponents(g) });
     return true;
   } catch (err) {
     if (err && (err.code === 10008 || err.code === 10003 || err.code === 50001)) {
@@ -288,15 +299,15 @@ async function handleCreateSubmit(client, i) {
 
   const duration = parseDuration(durationText);
   if (!duration) {
-    return i.reply({ content: "❌ Couldn't read that time. Use something like `30s`, `5m`, `2h`, `1d` or `1w`.", flags: EPHEMERAL });
+    return i.reply({ content: "Couldn't read that time. Use something like `30s`, `5m`, `2h`, `1d` or `1w`.", flags: EPHEMERAL });
   }
   if (duration > MAX_DURATION_MS) {
-    return i.reply({ content: "❌ That's too long — the maximum is 52 weeks.", flags: EPHEMERAL });
+    return i.reply({ content: "That's too long — the maximum is 52 weeks.", flags: EPHEMERAL });
   }
 
   const winnerCount = parseInt(winnersText, 10);
   if (!Number.isInteger(winnerCount) || winnerCount < 1 || winnerCount > MAX_WINNERS) {
-    return i.reply({ content: `❌ Number of winners must be between 1 and ${MAX_WINNERS}.`, flags: EPHEMERAL });
+    return i.reply({ content: `Number of winners must be between 1 and ${MAX_WINNERS}.`, flags: EPHEMERAL });
   }
 
   const g = {
@@ -317,27 +328,28 @@ async function handleCreateSubmit(client, i) {
 
   let message;
   try {
-    message = await i.channel.send({ embeds: [buildEmbed(g)], components: buildComponents(g) });
+    g.iconURL = i.guild.iconURL({ size: 128 }) || undefined;
+    message = await i.channel.send({ embeds: [buildEmbed(g, g.iconURL)], components: buildComponents(g) });
   } catch (err) {
     console.error("Giveaway send failed:", err);
-    return i.reply({ content: "❌ I couldn't post in this channel — check my permissions.", flags: EPHEMERAL });
+    return i.reply({ content: "I couldn't post in this channel — check my permissions.", flags: EPHEMERAL });
   }
 
   g.id = g.messageId = message.id;
   data[message.id] = g;
   save();
 
-  return i.reply({ content: `✅ Giveaway for **${prize}** started.`, flags: EPHEMERAL });
+  return i.reply({ content: `Giveaway for **${prize}** started.`, flags: EPHEMERAL });
 }
 
 // ---------------------------------------------------------------- entering
 async function handleEnter(client, i) {
   const g = data[i.message.id];
   if (!g) {
-    return i.reply({ content: "❌ This giveaway isn't active anymore.", flags: EPHEMERAL });
+    return i.reply({ content: "This giveaway isn't active anymore.", flags: EPHEMERAL });
   }
   if (g.ended || Date.now() >= g.endsAt) {
-    return i.reply({ content: "❌ This giveaway has ended.", flags: EPHEMERAL });
+    return i.reply({ content: "This giveaway has ended.", flags: EPHEMERAL });
   }
 
   const idx = g.entries.indexOf(i.user.id);
@@ -345,7 +357,7 @@ async function handleEnter(client, i) {
     g.entries.push(i.user.id);
     save();
     scheduleRefresh(client, g);
-    return i.reply({ content: "✅ You're in! Click Enter again to leave.", flags: EPHEMERAL });
+    return i.reply({ content: "You're in! Click Enter again to leave.", flags: EPHEMERAL });
   }
 
   g.entries.splice(idx, 1);
@@ -380,7 +392,7 @@ function init(client) {
     } catch (err) {
       console.error("Giveaway interaction error:", err);
       if (!i.isAutocomplete() && !i.replied && !i.deferred) {
-        i.reply({ content: "❌ Something went wrong with that giveaway action.", flags: EPHEMERAL }).catch(() => {});
+        i.reply({ content: "Something went wrong with that giveaway action.", flags: EPHEMERAL }).catch(() => {});
       }
     }
   });
