@@ -136,7 +136,7 @@ module.exports = {
         if (!ids.includes(user.id)) {
           await addProtection(guild, rule, user.id, interaction.user.tag);
           return interaction.editReply({
-            content: `${user} now has ping protection!`,
+            content: `@${user.username} now has ping protection!`,
             allowedMentions: NO_PINGS
           });
         }
@@ -184,13 +184,15 @@ async function showPanel(interaction, ids, viaFollowUp) {
       console.error("/ping remove failed:", err);
       return b.reply({ content: "❌ Couldn't update AutoMod.", flags: 64 }).catch(() => {});
     }
+    const removedUser = await interaction.client.users.fetch(id).catch(() => null);
+    const name = `@${removedUser?.username || id}`;
     const left = idsFrom(await findRule(interaction.guild));
     if (!left.length) {
       collector.stop("empty");
-      return b.update({ content: `✅ <@${id}> no longer has ping protection.`, components: [], allowedMentions: NO_PINGS });
+      return b.update({ content: `✅ ${name} no longer has ping protection.`, components: [], allowedMentions: NO_PINGS });
     }
     return b.update({
-      content: `✅ <@${id}> no longer has ping protection.\n\n🛡️ Press another user to remove theirs:`,
+      content: `✅ ${name} no longer has ping protection.\n\n🛡️ Press another user to remove theirs:`,
       components: await buildPanel(interaction.client, left),
       allowedMentions: NO_PINGS
     });
