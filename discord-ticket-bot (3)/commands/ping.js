@@ -112,11 +112,11 @@ async function buildPanel(client, ids) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("ping")
-    .setDescription("Ping protection — admin only")
+    .setDescription("Ping protection")
     .addSubcommand(s => s
       .setName("protect")
-      .setDescription("Give a user ping protection — run again and press a user to remove it")
-      .addUserOption(o => o.setName("user").setDescription("Who to protect").setRequired(false))),
+      .setDescription("Protects a user from being pinged")
+      .addUserOption(o => o.setName("user").setDescription("User to protect").setRequired(false))),
 
   async execute(interaction) {
     if (!interaction.guild || !isAdmin(interaction.member)) {
