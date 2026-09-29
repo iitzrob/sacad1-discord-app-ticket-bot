@@ -5,6 +5,7 @@ const { isStaff } = require("../utils");
 
 // /staff-stream-ping — staff only, once every 2 hours (same cooldown as /partnership ping).
 const PING_ROLE = "1543535853937365072";
+const ALLOWED_CHANNEL = "1466262716372226180";
 const COOLDOWN_MS = 2 * 60 * 60 * 1000;
 
 // Cooldown is saved to disk so restarting the bot doesn't reset it.
@@ -32,6 +33,10 @@ module.exports = {
   async execute(interaction) {
     if (!interaction.guild || !isStaff(interaction.member)) {
       return interaction.reply({ content: "No permission.", flags: 64 });
+    }
+
+    if (interaction.channel.id !== ALLOWED_CHANNEL) {
+      return interaction.reply({ content: "You can't use this command in this channel.", flags: 64 });
     }
 
     const last = readLast();
