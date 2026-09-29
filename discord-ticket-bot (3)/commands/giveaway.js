@@ -28,9 +28,9 @@ function writeLast(ts) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("giveaway")
-    .setDescription("Giveaway tools — staff only")
+    .setDescription("Giveaway tools")
     .addSubcommand(s =>
-      s.setName("ping").setDescription("Ping the giveaway role (once every 2 hours)")),
+      s.setName("ping").setDescription("Pings the giveaway role")),
 
   async execute(interaction) {
     if (!interaction.guild || !isStaff(interaction.member)) {
