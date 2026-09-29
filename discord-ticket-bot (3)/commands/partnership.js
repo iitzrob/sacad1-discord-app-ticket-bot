@@ -29,10 +29,10 @@ function writeLast(ts) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("partnership")
-    .setDescription("Partnership tools — staff only")
+    .setDescription("Partnership tools")
     .addSubcommand(s =>
       s.setName("ping")
-        .setDescription("Ping @here or the partnership role (once every 2 hours)")
+        .setDescription("Pings @here or the partnership role")
         .addStringOption(o =>
           o.setName("who")
             .setDescription("What to ping")
