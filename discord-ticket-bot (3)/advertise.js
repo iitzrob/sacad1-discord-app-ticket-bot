@@ -22,24 +22,56 @@ const path = require("path");
 // =====================================================================
 const DATA_FILE = path.join(__dirname, "data", "adverts.json");
 
-function load() {
-  try {
-    return JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
-  } catch {
-    return { campaigns: [] };
-  }
+const BACKUP_FILE = DATA_FILE + ".bak";
+
+function readJson(file) {
+  const parsed = JSON.parse(fs.readFileSync(file, "utf-8"));
+  if (!parsed || !Array.isArray(parsed.campaigns)) throw new Error("no campaigns array");
+  return parsed;
 }
 
-function save() {
+// Missing file -> start fresh (or restore the backup). File exists but can't
+// be read (cut off by a crash, etc.) -> keep a copy of it and fall back to the
+// last good backup instead of silently starting empty and overwriting every
+// saved ad.
+function load() {
+  if (!fs.existsSync(DATA_FILE)) {
+    try {
+      const restored = readJson(BACKUP_FILE);
+      console.warn("adverts.json was missing - restored from adverts.json.bak");
+      return restored;
+    } catch {
+      return { campaigns: [] };
+    }
+  }
   try {
-    fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+    return readJson(DATA_FILE);
   } catch (err) {
-    console.error("Failed to save adverts.json:", err);
+    console.error("adverts.json is unreadable:", err.message);
+    try { fs.copyFileSync(DATA_FILE, DATA_FILE + ".corrupt-" + Date.now()); } catch {}
+    try {
+      const restored = readJson(BACKUP_FILE);
+      console.warn("Restored ads from adverts.json.bak");
+      return restored;
+    } catch {
+      return { campaigns: [] };
+    }
   }
 }
 
 const data = load();
+
+function save() {
+  try {
+    fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
+    const tmp = DATA_FILE + ".tmp";
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+    if (fs.existsSync(DATA_FILE)) fs.copyFileSync(DATA_FILE, BACKUP_FILE);
+    fs.renameSync(tmp, DATA_FILE);
+  } catch (err) {
+    console.error("Failed to save adverts.json:", err);
+  }
+}
 
 function genId() {
   return `ad_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
@@ -81,6 +113,11 @@ function findCampaignByTarget(guildId, target) {
   return matches.length ? matches[matches.length - 1] : null;
 }
 
+// Every ad saved in this guild, oldest first (used by /adsee when nothing matches).
+function listCampaigns(guildId) {
+  return data.campaigns.filter(c => c.guildId === guildId);
+}
+
 function getCampaignById(id) {
   return data.campaigns.find(c => c.id === id) || null;
 }
@@ -116,6 +153,7 @@ module.exports = {
   stopCampaignByTarget,
   findCampaignByTarget,
   getCampaignById,
+  listCampaigns,
   getActiveCampaigns,
   handleMemberJoinAds
 };
