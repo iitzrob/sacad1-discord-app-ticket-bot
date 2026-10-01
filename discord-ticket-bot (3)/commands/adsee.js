@@ -4,7 +4,7 @@ const {
   ComponentType, MessageFlags, PermissionsBitField
 } = require("discord.js");
 const { hasFullAccess } = require("../utils");
-const { findCampaignByTarget, getCampaignById } = require("../advertise");
+const { findCampaignByTarget, getCampaignById, listCampaigns } = require("../advertise");
 
 const COLOR = 0x8B5CF6;
 const MAX_CHARS = 3500; // Components V2 allows 4000 characters of text per message
@@ -131,8 +131,10 @@ module.exports = {
 
     const campaign = findCampaignByTarget(interaction.guild.id, amount);
     if (!campaign) {
+      const saved = [...new Set(listCampaigns(interaction.guild.id).map(c => c.target))];
+      const hint = saved.length ? ` Saved ads: ${saved.join(", ")}.` : " There are no saved ads on this bot.";
       return interaction.reply({
-        content: `No ad found with an amount of ${amount}.`,
+        content: `No ad found with an amount of ${amount}.${hint}`,
         flags: MessageFlags.Ephemeral
       });
     }
