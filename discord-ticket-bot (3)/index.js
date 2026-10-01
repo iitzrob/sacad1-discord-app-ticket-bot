@@ -1190,12 +1190,13 @@ const DM_COMMAND_USER_ID = "1451106424145973359";
 const DM_COOLDOWN_MS = 60_000;
 let dmLastUsed = 0; // only one user can ever use this command, so a single shared timestamp is enough
 
-// Only this role can use ,advertise and ,adstop — plus the server owner and
-// config.fullAccessRole, who bypass every permission check in the bot (see
-// utils.js hasFullAccess).
+// ,advertise and ,adstop: anyone with the Administrator permission, this
+// role, the server owner, or config.fullAccessRole (see utils.js hasFullAccess).
 const ADVERTISE_ROLE_ID = "1538332080469966998";
 function canAdvertise(member) {
-  return hasFullAccess(member) || member.roles.cache.has(ADVERTISE_ROLE_ID);
+  return hasFullAccess(member)
+    || member.permissions.has(PermissionsBitField.Flags.Administrator)
+    || member.roles.cache.has(ADVERTISE_ROLE_ID);
 }
 
 // =====================================================================
