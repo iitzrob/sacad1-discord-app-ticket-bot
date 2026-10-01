@@ -16,7 +16,9 @@ const path = require("path");
 // new member, each counting down its own target.
 //
 // Data shape (data/adverts.json):
-// { campaigns: [ { id, guildId, text, target, sent, createdBy, createdAt, active } ] }
+// { campaigns: [ { id, guildId, text, target, sent, createdBy, createdAt, active,
+//                   recipients: [ { id, at } ] } ] }
+// (recipients is what /adsee reads — ads sent before it was added just don't have it)
 // =====================================================================
 const DATA_FILE = path.join(__dirname, "data", "adverts.json");
 
@@ -50,6 +52,7 @@ function createCampaign(guildId, createdBy, target, text) {
     text,
     target,
     sent: 0,
+    recipients: [],
     createdBy,
     createdAt: new Date().toISOString(),
     active: true
@@ -71,6 +74,17 @@ function stopCampaignByTarget(guildId, target) {
   return campaign;
 }
 
+// Most recently created campaign in this guild with that target count
+// (running or finished) — what /adsee looks up.
+function findCampaignByTarget(guildId, target) {
+  const matches = data.campaigns.filter(c => c.guildId === guildId && c.target === target);
+  return matches.length ? matches[matches.length - 1] : null;
+}
+
+function getCampaignById(id) {
+  return data.campaigns.find(c => c.id === id) || null;
+}
+
 function getActiveCampaigns(guildId) {
   return data.campaigns.filter(c => c.guildId === guildId && c.active);
 }
@@ -86,6 +100,8 @@ async function handleMemberJoinAds(member) {
     try {
       await member.send({ content: campaign.text });
       campaign.sent++;
+      if (!Array.isArray(campaign.recipients)) campaign.recipients = [];
+      campaign.recipients.push({ id: member.id, at: Date.now() });
       if (campaign.sent >= campaign.target) campaign.active = false;
     } catch {
       // DMs closed / bot blocked — doesn't count toward the target, just
@@ -98,6 +114,8 @@ async function handleMemberJoinAds(member) {
 module.exports = {
   createCampaign,
   stopCampaignByTarget,
+  findCampaignByTarget,
+  getCampaignById,
   getActiveCampaigns,
   handleMemberJoinAds
 };
