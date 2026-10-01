@@ -1,20 +1,19 @@
 const {
   SlashCommandBuilder, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder,
   SeparatorSpacingSize, ActionRowBuilder, ButtonBuilder, ButtonStyle,
-  ComponentType, MessageFlags
+  ComponentType, MessageFlags, PermissionsBitField
 } = require("discord.js");
 const { hasFullAccess } = require("../utils");
 const { findCampaignByTarget, getCampaignById } = require("../advertise");
 
-// Same role that's allowed to use ,advertise and ,adstop (see index.js).
-const ADVERTISE_ROLE_ID = "1538332080469966998";
 const COLOR = 0x8B5CF6;
 const MAX_CHARS = 3500; // Components V2 allows 4000 characters of text per message
 const NO_PINGS = { parse: [] };
 const V2_EPHEMERAL = MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral;
 
+// Administrator permission only (the owner and the full access role always pass too).
 function canUse(member) {
-  return hasFullAccess(member) || member.roles.cache.has(ADVERTISE_ROLE_ID);
+  return hasFullAccess(member) || member.permissions.has(PermissionsBitField.Flags.Administrator);
 }
 
 function statusOf(c) {
