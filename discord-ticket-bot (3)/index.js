@@ -22,6 +22,7 @@ const {
 const { recordDeletedMessage, getSnipe, buildSnipeEmbed } = require("./snipe");
 const { handleMessageForSticky } = require("./sticky");
 const { setAfk, clearAfk, getAfk } = require("./afk");
+const { getPrefix } = require("./prefixConfig");
 const { recordClaim, recordClose } = require("./stats");
 const { buildLeaderboardEmbed, buildLeaderboardMenu } = require("./stats");
 const { refreshCard } = require("./statsCards");
@@ -1208,7 +1209,7 @@ client.on("messageCreate", message => {
   if (!message.guild) return;
 
   // Sending any message (other than setting AFK again) clears your own AFK.
-  if (!message.content.toLowerCase().startsWith(",afk")) {
+  if (!message.content.toLowerCase().startsWith(getPrefix(message.guild.id) + "afk")) {
     if (getAfk(message.author.id)) {
       clearAfk(message.author.id);
       message.reply({ content: `👋 Welcome back ${message.author}, I removed your AFK status.` }).catch(() => {});
@@ -1259,15 +1260,17 @@ client.on("messageCreate", async message => {
 client.on("messageCreate", async message => {
   if (message.author.bot) return;
   if (!message.guild) return; // guild-only commands
-  if (!message.content.startsWith(",")) return;
+  const prefix = getPrefix(message.guild.id);
+  if (!message.content.startsWith(prefix)) return;
 
-  if (message.content.toLowerCase().startsWith(",afk")) {
-    const reason = message.content.slice(",afk".length).trim() || "AFK";
+  const afkCmd = prefix + "afk";
+  if (message.content.toLowerCase().startsWith(afkCmd)) {
+    const reason = message.content.slice(afkCmd.length).trim() || "AFK";
     setAfk(message.author.id, reason);
     return message.reply({ content: `😴 You're now AFK: ${reason}` });
   }
 
-  const [rawCmd] = message.content.slice(1).trim().split(/\s+/);
+  const [rawCmd] = message.content.slice(prefix.length).trim().split(/\s+/);
   const cmd = (rawCmd || "").toLowerCase();
 
   if (cmd === "s") {
@@ -1396,10 +1399,10 @@ client.on("messageCreate", async message => {
       return message.reply({ content: "No permission." });
     }
 
-    const arg = message.content.slice(1).trim().split(/\s+/)[1];
+    const arg = message.content.slice(prefix.length).trim().split(/\s+/)[1];
     const requested = parseInt(arg, 10);
     if (!arg || isNaN(requested) || requested < 1) {
-      return message.reply({ content: "Usage: `,purge <amount>` — amount must be between 1 and 100." });
+      return message.reply({ content: `Usage: \`${prefix}purge <amount>\` — amount must be between 1 and 100.` });
     }
     const amount = Math.min(requested, 100);
 
@@ -1424,7 +1427,7 @@ client.on("messageCreate", async message => {
 
   if (cmd === "roast") {
     const target = message.mentions.users.first();
-    if (!target) return message.reply({ content: "Mention someone to roast! Usage: `,roast @user`" });
+    if (!target) return message.reply({ content: `Mention someone to roast! Usage: \`${prefix}roast @user\`` });
 
     const now = Date.now();
     const lastUsed = roastCooldowns.get(message.author.id);
@@ -1452,14 +1455,14 @@ client.on("messageCreate", async message => {
     }
 
     // Accept either an @mention or a raw user ID as the first argument.
-    const args = message.content.slice(1).trim().split(/\s+/); // ["dm", "<target>", ...rest]
+    const args = message.content.slice(prefix.length).trim().split(/\s+/); // ["dm", "<target>", ...rest]
     const rawTarget = args[1];
     const mentioned = message.mentions.users.first();
     const idMatch = rawTarget && rawTarget.match(/^(?:<@!?(\d+)>|(\d{15,25}))$/);
     const targetId = mentioned?.id || (idMatch ? (idMatch[1] || idMatch[2]) : null);
 
     if (!targetId) {
-      return message.reply({ content: "Usage: `,dm @user <message>` or `,dm <user id> <message>`" });
+      return message.reply({ content: `Usage: \`${prefix}dm @user <message>\` or \`${prefix}dm <user id> <message>\`` });
     }
 
     let target;
@@ -1477,7 +1480,7 @@ client.on("messageCreate", async message => {
       .trim();
 
     if (!body) {
-      return message.reply({ content: "You need to actually include a message. Usage: `,dm @user <message>` or `,dm <user id> <message>`" });
+      return message.reply({ content: `You need to actually include a message. Usage: \`${prefix}dm @user <message>\` or \`${prefix}dm <user id> <message>\`` });
     }
 
     try {
@@ -1499,18 +1502,19 @@ client.on("messageCreate", async message => {
       return message.reply({ content: "No permission." });
     }
 
-    const match = message.content.match(/^,advertise\s+(\d+)\s+([\s\S]+)$/i);
+    const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = message.content.match(new RegExp(`^${escapedPrefix}advertise\\s+(\\d+)\\s+([\\s\\S]+)$`, "i"));
     if (!match) {
-      return message.reply({ content: "Usage: `,advertise <count> <ad text>` — e.g. `,advertise 20 Check out our giveaway!`" });
+      return message.reply({ content: `Usage: \`${prefix}advertise <count> <ad text>\` — e.g. \`${prefix}advertise 20 Check out our giveaway!\`` });
     }
     const target = parseInt(match[1], 10);
     const text = match[2].trim();
 
     if (target <= 0) {
-      return message.reply({ content: "Usage: `,advertise <count> <ad text>` — e.g. `,advertise 20 Check out our giveaway!`" });
+      return message.reply({ content: `Usage: \`${prefix}advertise <count> <ad text>\` — e.g. \`${prefix}advertise 20 Check out our giveaway!\`` });
     }
     if (!text) {
-      return message.reply({ content: "You need to include the ad text. Usage: `,advertise <count> <ad text>`" });
+      return message.reply({ content: `You need to include the ad text. Usage: \`${prefix}advertise <count> <ad text>\`` });
     }
 
     createCampaign(message.guild.id, message.author.id, target, text);
@@ -1524,10 +1528,10 @@ client.on("messageCreate", async message => {
       return message.reply({ content: "No permission." });
     }
 
-    const args = message.content.slice(1).trim().split(/\s+/);
+    const args = message.content.slice(prefix.length).trim().split(/\s+/);
     const target = parseInt(args[1], 10);
     if (!Number.isInteger(target) || target <= 0) {
-      return message.reply({ content: "Usage: `,adstop <count>` — the same count you started the campaign with, e.g. `,adstop 20`" });
+      return message.reply({ content: `Usage: \`${prefix}adstop <count>\` — the same count you started the campaign with, e.g. \`${prefix}adstop 20\`` });
     }
 
     const campaign = stopCampaignByTarget(message.guild.id, target);
