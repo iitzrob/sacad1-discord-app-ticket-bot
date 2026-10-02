@@ -4,7 +4,7 @@ const {
   Client, GatewayIntentBits, Partials, ChannelType, PermissionsBitField,
   ActionRowBuilder, EmbedBuilder, ModalBuilder,
   TextInputBuilder, TextInputStyle, ButtonBuilder, ButtonStyle, Collection,
-  AttachmentBuilder, ActivityType
+  AttachmentBuilder, ActivityType, Options
 } = require("discord.js");
 const config = require("./config");
 const { isStaff, isBuildStaff, isAdmin, hasFullAccess } = require("./utils");
@@ -251,7 +251,27 @@ const client = new Client({
     GatewayIntentBits.DirectMessages,
     GatewayIntentBits.MessageContent
   ],
-  partials: [Partials.Channel, Partials.Message]
+  partials: [Partials.Channel, Partials.Message],
+
+  // Keep memory low: a small message cache, and skip caches this bot never
+  // uses. The member cache is left alone on purpose - /tracker-start relies
+  // on it to list who is in a role.
+  makeCache: Options.cacheWithLimits({
+    ...Options.DefaultMakeCacheSettings,
+    MessageManager: 50,
+    PresenceManager: 0,
+    VoiceStateManager: 0,
+    GuildInviteManager: 0,
+    GuildBanManager: 0,
+    StageInstanceManager: 0,
+    ThreadMemberManager: 0
+  }),
+
+  // Drop cached messages older than 30 minutes, checked every 5 minutes.
+  sweepers: {
+    ...Options.DefaultSweeperSettings,
+    messages: { interval: 300, lifetime: 1800 }
+  }
 });
 
 // =====================================================================
@@ -297,6 +317,27 @@ client.once("ready", () => {
   console.log("Note: slash commands are registered via `node deploy-commands.js`, not on startup.");
   client.user.setActivity("discord.gg/sacad1", { type: ActivityType.Watching });
   startWeeklyResetScheduler(client);
+
+  // Memory report (temporary, for finding out where RAM goes): once after
+  // 2 minutes, then every 10 minutes. Search the logs for "[MEM]". "afterGC"
+  // is the heap after a forced cleanup (needs the --expose-gc node flag).
+  const memReport = () => {
+    const mb = n => Math.round(n / 1048576);
+    const before = process.memoryUsage();
+    let afterGC = "n/a";
+    if (typeof global.gc === "function") {
+      global.gc();
+      afterGC = mb(process.memoryUsage().heapUsed) + "MB";
+    }
+    const members = client.guilds.cache.reduce((n, g) => n + g.members.cache.size, 0);
+    console.log(
+      `[MEM] rss=${mb(before.rss)}MB heapUsed=${mb(before.heapUsed)}MB afterGC=${afterGC} ` +
+      `external=${mb(before.external)}MB | guilds=${client.guilds.cache.size} ` +
+      `members=${members} users=${client.users.cache.size}`
+    );
+  };
+  setTimeout(memReport, 2 * 60 * 1000);
+  setInterval(memReport, 10 * 60 * 1000);
 
   // 5-day ticket auto-close — run once at startup, then on a timer.
   const autoCloseIntervalMs = config.autoClose?.checkIntervalMs ?? 15 * 60 * 1000;
