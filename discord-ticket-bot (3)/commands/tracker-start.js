@@ -90,6 +90,7 @@ module.exports = {
     // moment from now, role.members is accurate instead of only reflecting
     // whichever members happened to already be cached from other activity.
     await interaction.guild.members.fetch().catch(() => {});
+    interaction.client.membersPrimedAt = Date.now(); // tells the member sweeper to wait
 
     const selection = { userIds: [], roleIds: [] };
     return interaction.editReply({
