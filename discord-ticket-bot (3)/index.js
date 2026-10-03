@@ -259,6 +259,10 @@ const client = new Client({
   makeCache: Options.cacheWithLimits({
     ...Options.DefaultMakeCacheSettings,
     MessageManager: 50,
+    UserManager: {
+      maxSize: 100,
+      keepOverLimit: (user) => user.id === user.client.user.id,
+    },
     PresenceManager: 0,
     VoiceStateManager: 0,
     GuildInviteManager: 0,
@@ -270,7 +274,19 @@ const client = new Client({
   // Drop cached messages older than 30 minutes, checked every 5 minutes.
   sweepers: {
     ...Options.DefaultSweeperSettings,
-    messages: { interval: 300, lifetime: 1800 }
+    messages: { interval: 300, lifetime: 1800 },
+    // /tracker-start and /linked-users load EVERY member into memory. Clear
+    // them out every 10 minutes (members re-appear on their next message).
+    // Skipped while an admin is in the middle of /tracker-start so the
+    // role member list stays complete.
+    guildMembers: {
+      interval: 600,
+      filter: () => {
+        const primedRecently = Date.now() - (client.membersPrimedAt || 0) < 15 * 60 * 1000;
+        if (primedRecently || pendingTrackerSelection.size || pendingTrackerSetup.size) return null;
+        return (member) => member.id !== member.client.user.id;
+      }
+    }
   }
 });
 
