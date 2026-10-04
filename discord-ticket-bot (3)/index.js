@@ -139,10 +139,22 @@ async function performTicketClose(guild, channel, closedByUser, reason, opts = {
     const openerId = channel.topic;
     const opener = await client.users.fetch(openerId).catch(() => null);
     if (opener) {
+      // Same info as the log entry, but for the person who opened the ticket
+      const dmLines = [`**Channel:** #${channel.name}`];
+      if (!auto) dmLines.push(`**Closed by:** ${closedByUser} (${closedByUser.username || closedByUser.tag})`);
+      if (auto) dmLines.push(`**Reason:** Inactive for ${days} days`);
+      else if (reason) dmLines.push(`**Reason:** ${reason}`);
+      dmLines.push(`**Category:** ${channel.parent?.name || "Unknown"}`);
+
+      const dmEmbed = new EmbedBuilder()
+        .setColor(0xF04747)
+        .setTitle(auto ? "Ticket Auto Closed" : "Ticket Closed")
+        .setDescription(dmLines.join("\n"))
+        .setFooter({ text: guild.name })
+        .setTimestamp();
+
       await opener.send({
-        content: auto
-          ? `🔒 **Auto Closed**\n**Inactive for ${days} days** — here's the transcript for your ticket **#${channel.name}**.`
-          : `📄 Here's the transcript for your ticket **#${channel.name}**.`,
+        embeds: [dmEmbed],
         files: [new AttachmentBuilder(Buffer.from(content, "utf-8"), { name: filename })]
       }).catch(() => {});
     }
@@ -892,7 +904,14 @@ client.on("interactionCreate", async i => {
 
     await i.update({ components: [disabledRow] });
     await i.followUp({ content: `${i.user} agreed — closing in 3 seconds...` });
-    await performTicketClose(i.guild, i.channel, i.user, null);
+
+    // The close is credited to whoever ran ,requestclose (their ID is in the
+    // button). Old buttons without an ID fall back to the person who clicked.
+    const requesterId = i.customId.slice("reqclose_accept_".length);
+    const requester = /^\d{15,25}$/.test(requesterId)
+      ? await client.users.fetch(requesterId).catch(() => null)
+      : null;
+    await performTicketClose(i.guild, i.channel, requester || i.user, null);
     return;
   }
 
@@ -1619,8 +1638,8 @@ client.on("messageCreate", async message => {
       .setColor("#F1C40F")
       .setDescription(`<@${openerId}> ${message.author} has requested to close this ticket. Do you agree?`);
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("reqclose_accept_").setLabel("Accept").setEmoji("✅").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("reqclose_deny_").setLabel("Deny").setEmoji("❌").setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId(`reqclose_accept_${message.author.id}`).setLabel("Accept").setEmoji("✅").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`reqclose_deny_${message.author.id}`).setLabel("Deny").setEmoji("❌").setStyle(ButtonStyle.Secondary)
     );
 
     return message.channel.send({ content: `<@${openerId}>`, embeds: [embed], components: [row] });
