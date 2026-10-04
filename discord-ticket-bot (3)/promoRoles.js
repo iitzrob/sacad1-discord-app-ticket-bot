@@ -8,6 +8,10 @@ const { hasFullAccess } = require("./utils");
 // Channel the promo / demo messages get posted in
 const PROMO_CHANNEL_ID = "1523679194662572032";
 
+// The base "staff" role every staff member has (lowest of all).
+// Given on any promo to a staff role, removed when someone is demoted to member.
+const STAFF_BASE_ROLE_ID = "1482008632747884736";
+
 const UPVOTE_EMOJI = "<:97872upvote:1556255804032819271>";
 const DOWNVOTE_EMOJI = "<:123113downvote:1556255894705274960>";
 
@@ -94,11 +98,26 @@ async function runRoleChange(interaction, mode) {
     }
   }
 
-  // Roles to remove: every other staff role they hold
+  // The base staff role (every staff member has it)
+  const staffBase = guild.roles.cache.get(STAFF_BASE_ROLE_ID) || null;
+  if (!staffBase) {
+    return interaction.editReply(
+      "❌ I can't find the base staff role. Check STAFF_BASE_ROLE_ID in `promoRoles.js`."
+    );
+  }
+
+  // Roles to add / remove
+  //  - going to a staff role: add it + the base staff role, remove their other ladder roles
+  //  - going to member: remove every ladder role + the base staff role
+  const toAdd = [];
+  if (newEntry && !member.roles.cache.has(newEntry.role.id)) toAdd.push(newEntry.role);
+  if (newEntry && !member.roles.cache.has(staffBase.id)) toAdd.push(staffBase);
+
   const toRemove = owned.filter(e => !newEntry || e.key !== newEntry.key).map(e => e.role);
+  if (!newEntry && member.roles.cache.has(staffBase.id)) toRemove.push(staffBase);
 
   // Can the bot actually manage these roles?
-  const blocked = [newEntry?.role, ...toRemove].filter(r => r && !r.editable);
+  const blocked = [...toAdd, ...toRemove].filter(r => !r.editable);
   if (blocked.length) {
     return interaction.editReply(
       `❌ I can't manage ${blocked.map(r => `**${r.name}**`).join(", ")}. ` +
@@ -109,9 +128,7 @@ async function runRoleChange(interaction, mode) {
   const reason = `${isPromo ? "Promo" : "Demo"} by ${interaction.user.tag}`;
 
   try {
-    if (newEntry && !member.roles.cache.has(newEntry.role.id)) {
-      await member.roles.add(newEntry.role, reason);
-    }
+    if (toAdd.length) await member.roles.add(toAdd, reason);
     if (toRemove.length) await member.roles.remove(toRemove, reason);
   } catch (err) {
     console.error(`[${mode}] Failed to change roles:`, err);
