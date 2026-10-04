@@ -127,23 +127,31 @@ async function runRoleChange(interaction, mode) {
 
   const reason = `${isPromo ? "Promo" : "Demo"} by ${interaction.user.tag}`;
 
+  const names = list => list.map(r => r.name).join(", ") || "-";
+  console.log(
+    `[${mode}] ${targetUser.tag} | before: ${names(member.roles.cache.filter(r => r.id !== guild.id).map(r => r))}` +
+    ` | add: ${names(toAdd)} | remove: ${names(toRemove)}`
+  );
+
+  // One role at a time (a single add/remove call per role is the most reliable way)
   try {
-    if (toAdd.length) await member.roles.add(toAdd, reason);
-    if (toRemove.length) await member.roles.remove(toRemove, reason);
+    for (const r of toAdd) await member.roles.add(r.id, reason);
+    for (const r of toRemove) await member.roles.remove(r.id, reason);
   } catch (err) {
     console.error(`[${mode}] Failed to change roles:`, err);
     return interaction.editReply(`❌ Couldn't change their roles: ${err.message}`);
   }
 
-  // Double-check against Discord: when going to member, the base staff role must be gone
-  let staffRoleStuck = false;
-  if (!newEntry) {
-    const fresh = await guild.members.fetch({ user: targetUser.id, force: true }).catch(() => null);
-    if (fresh && fresh.roles.cache.has(staffBase.id)) {
-      await fresh.roles.remove(staffBase, reason).catch(err => console.error(`[${mode}] Retry removing staff role failed:`, err));
-      const again = await guild.members.fetch({ user: targetUser.id, force: true }).catch(() => null);
-      staffRoleStuck = !!again && again.roles.cache.has(staffBase.id);
+  // Double-check against Discord. Anything that should be gone but isn't gets one more try.
+  let stuckRoles = [];
+  const fresh = await guild.members.fetch({ user: targetUser.id, force: true }).catch(() => null);
+  if (fresh) {
+    for (const r of toRemove.filter(r => fresh.roles.cache.has(r.id))) {
+      await fresh.roles.remove(r.id, reason).catch(err => console.error(`[${mode}] Retry removing ${r.name} failed:`, err));
     }
+    const again = await guild.members.fetch({ user: targetUser.id, force: true }).catch(() => null);
+    if (again) stuckRoles = toRemove.filter(r => again.roles.cache.has(r.id));
+    console.log(`[${mode}] ${targetUser.tag} | after: ${names(again ? again.roles.cache.filter(r => r.id !== guild.id).map(r => r) : [])}`);
   }
 
   // ---- announcement ----
@@ -163,7 +171,7 @@ async function runRoleChange(interaction, mode) {
   const summary =
     `${isPromo ? "✅ Promoted" : "✅ Demoted"} ${targetUser}: ${fromText} ➜ ${toText}` +
     (posted ? "" : `\n⚠️ Roles were changed, but I couldn't post in <#${PROMO_CHANNEL_ID}> (check my permissions there).`)
-    + (staffRoleStuck ? `\n⚠️ The **${staffBase.name}** role is still on them — something else (another bot or role sync) may be adding it back.` : "");
+    + (stuckRoles.length ? `\n⚠️ Still on them after removing: ${stuckRoles.map(r => `**${r.name}**`).join(", ")}. Something else (another bot or role sync) may be adding it back.` : "");
 
   return interaction.editReply({ content: summary, allowedMentions: { parse: [] } });
 }
