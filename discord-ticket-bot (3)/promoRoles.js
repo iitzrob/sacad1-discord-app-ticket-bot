@@ -16,6 +16,7 @@ const DOWNVOTE_EMOJI = "<:123113downvote:1556255894705274960>";
 //   aliases: if id is left "", the bot looks for a role in the server whose
 //            name matches one of these (case/spaces/dots ignored)
 const LADDER = [
+  { key: "trial_staff", label: "Trial Staff", id: "1535572623797387274", aliases: ["trialstaff", "trial"] },
   { key: "helper",     label: "Helper",     id: "1514937867598823565", aliases: ["helper"] },
   { key: "sr_helper",  label: "Sr Helper",  id: "1536240048033374298", aliases: ["srhelper", "seniorhelper"] },
   { key: "mod",        label: "Mod",        id: "1514938319195340910", aliases: ["mod", "moderator"] },
