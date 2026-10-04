@@ -8,7 +8,7 @@ const {
 } = require("discord.js");
 const config = require("./config");
 const { isStaff, isBuildStaff, isAdmin, hasFullAccess } = require("./utils");
-const { tickets, sendTicketPanel, logTicketEvent, buildTranscript, addJumpToWinButton } = require("./tickets");
+const { tickets, sendTicketPanel, logTicketEvent, buildTranscript } = require("./tickets");
 const {
   serviceTickets, parseDimensions, calculateDigoutCost, formatPrice,
   sendServiceTicketPanel
@@ -64,8 +64,8 @@ function isServiceChannel(channel) {
 // ---------- Giveaway claim amount check ----------
 // Looks up config.giveawayCheck.channels for a message mentioning the
 // ticket owner with a matching amount, posts a clear Yes/No result in the
-// ticket, and (if a win is found) adds a "Jump to Win" button onto the
-// ticket panel message. Only ever runs once per ticket (tracked in
+// ticket (with the jump-to-win link inside the embed if a win is found).
+// Only ever runs once per ticket (tracked in
 // giveawayChecks.js), whether triggered from the modal or from a later
 // plain-text message.
 async function runGiveawayCheck(channel, ownerId, amount) {
@@ -74,34 +74,21 @@ async function runGiveawayCheck(channel, ownerId, amount) {
 
   const result = await findGiveawayWin(channel.guild, ownerId, amount);
 
-  if (!result.configured) {
+  if (result.configured && result.found) {
     const emb = new EmbedBuilder()
-      .setColor("#F04747")
-      .setTitle("❌ No Matching Win Found")
-      .setDescription(
-        `No matching win found for **${formatAmountShort(amount)}**.\n\n` +
-        "(Note for staff: `giveawayCheck.channels` isn't set in config.js yet, so this is unverified — please double check manually.)"
-      )
+      .setColor("#57F287")
+      .setTitle("✅ Win Found")
+      .setDescription(`Yes, they won **${formatAmountShort(amount)}** — [jump to the win](${result.message.url})`)
       .setTimestamp();
     return channel.send({ embeds: [emb] }).catch(() => {});
   }
 
-  if (result.found) {
-    const emb = new EmbedBuilder()
-      .setColor("#57F287")
-      .setTitle("✅ Win Found")
-      .setDescription(`Found a matching win for **${formatAmountShort(amount)}**!`)
-      .setTimestamp();
-    await channel.send({ embeds: [emb] }).catch(() => {});
-    await addJumpToWinButton(channel, result.message.url);
-  } else {
-    const emb = new EmbedBuilder()
-      .setColor("#F04747")
-      .setTitle("❌ No Matching Win Found")
-      .setDescription(`No matching win found for **${formatAmountShort(amount)}** in the configured giveaway channels. Staff can still verify manually.`)
-      .setTimestamp();
-    await channel.send({ embeds: [emb] }).catch(() => {});
-  }
+  const emb = new EmbedBuilder()
+    .setColor("#F1C40F")
+    .setTitle("🤔 No Results")
+    .setDescription(`Hm, couldn't find any results for **${formatAmountShort(amount)}**. Staff can still verify manually.`)
+    .setTimestamp();
+  return channel.send({ embeds: [emb] }).catch(() => {});
 }
 
 // A ticket channel this bot actually created always has its opener's user
@@ -681,23 +668,15 @@ client.on("interactionCreate", async i => {
           markGiveawayChecked(c.id);
           const result = await findGiveawayWin(i.guild, i.user.id, wonAmount);
 
-          if (!result.configured) {
-            emb.setColor("#F1C40F").addFields({
-              name: "Claim Check",
-              value: "⚠️ Not checked automatically — `giveawayCheck.channels` isn't set in config.js yet. Staff should verify manually."
-            });
-          } else if (result.found) {
+          if (result.configured && result.found) {
             emb.setColor("#57F287").addFields({
               name: "Claim Check",
               value: `✅ Yes, they won **${formatAmountShort(wonAmount)}** — [jump to the win](${result.message.url})`
             });
-            row.addComponents(
-              new ButtonBuilder().setLabel("Jump to Win").setEmoji("🔗").setStyle(ButtonStyle.Link).setURL(result.message.url)
-            );
           } else {
-            emb.setColor("#F04747").addFields({
+            emb.setColor("#F1C40F").addFields({
               name: "Claim Check",
-              value: `❌ No matching giveaway win found for **${formatAmountShort(wonAmount)}**.`
+              value: `🤔 Hm, couldn't find any results for **${formatAmountShort(wonAmount)}**. Staff can still verify manually.`
             });
           }
         } else {
