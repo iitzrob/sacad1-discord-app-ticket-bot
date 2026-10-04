@@ -122,7 +122,7 @@ async function runRoleChange(interaction, mode) {
   const toText = newEntry ? `<@&${newEntry.role.id}>` : "member";
   const emoji = isPromo ? UPVOTE_EMOJI : DOWNVOTE_EMOJI;
 
-  const message = `${targetUser}\n${emoji} ${fromText} 🠲 ${toText}`;
+  const message = `${targetUser}\n${emoji} ${fromText} ➜ ${toText}`;
 
   const channel = await guild.channels.fetch(PROMO_CHANNEL_ID).catch(() => null);
   let posted = false;
@@ -132,8 +132,8 @@ async function runRoleChange(interaction, mode) {
   }
 
   const summary =
-    `${isPromo ? "✅ Promoted" : "✅ Demoted"} ${targetUser}: ${fromText} 🠲 ${toText}` +
-    (posted ? ` — posted in <#${PROMO_CHANNEL_ID}>.` : `\n⚠️ Roles were changed, but I couldn't post in <#${PROMO_CHANNEL_ID}> (check my permissions there).`);
+    `${isPromo ? "✅ Promoted" : "✅ Demoted"} ${targetUser}: ${fromText} ➜ ${toText}` +
+    (posted ? "" : `\n⚠️ Roles were changed, but I couldn't post in <#${PROMO_CHANNEL_ID}> (check my permissions there).`);
 
   return interaction.editReply({ content: summary, allowedMentions: { parse: [] } });
 }
