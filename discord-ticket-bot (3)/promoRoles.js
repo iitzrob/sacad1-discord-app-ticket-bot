@@ -16,12 +16,12 @@ const DOWNVOTE_EMOJI = "<:123113downvote:1556255894705274960>";
 //   aliases: if id is left "", the bot looks for a role in the server whose
 //            name matches one of these (case/spaces/dots ignored)
 const LADDER = [
-  { key: "helper",     label: "Helper",     id: "", aliases: ["helper"] },
-  { key: "sr_helper",  label: "Sr Helper",  id: "", aliases: ["srhelper", "seniorhelper"] },
-  { key: "mod",        label: "Mod",        id: "", aliases: ["mod", "moderator"] },
-  { key: "sr_mod",     label: "Sr Mod",     id: "", aliases: ["srmod", "seniormod", "srmoderator", "seniormoderator"] },
-  { key: "admin",      label: "Admin",      id: "", aliases: ["admin", "administrator"] },
-  { key: "head_admin", label: "Head Admin", id: "", aliases: ["headadmin", "headadministrator"] }
+  { key: "helper",     label: "Helper",     id: "1514937867598823565", aliases: ["helper"] },
+  { key: "sr_helper",  label: "Sr Helper",  id: "1536240048033374298", aliases: ["srhelper", "seniorhelper"] },
+  { key: "mod",        label: "Mod",        id: "1514938319195340910", aliases: ["mod", "moderator"] },
+  { key: "sr_mod",     label: "Sr Mod",     id: "1514938633633923123", aliases: ["srmod", "seniormod", "srmoderator", "seniormoderator"] },
+  { key: "admin",      label: "Admin",      id: "1514939460788420748", aliases: ["admin", "administrator"] },
+  { key: "head_admin", label: "Head Admin", id: "1538335173882544249", aliases: ["headadmin", "headadministrator"] }
 ];
 
 const normalize = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, "");
