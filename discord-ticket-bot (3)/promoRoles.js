@@ -59,7 +59,7 @@ async function runRoleChange(interaction, mode) {
   const targetUser = interaction.options.getUser("user");
   const choice = interaction.options.getString("role");
 
-  const member = await guild.members.fetch(targetUser.id).catch(() => null);
+  const member = await guild.members.fetch({ user: targetUser.id, force: true }).catch(() => null);
   if (!member) return interaction.editReply("❌ That user isn't in this server.");
 
   await guild.roles.fetch().catch(() => {});
@@ -135,6 +135,17 @@ async function runRoleChange(interaction, mode) {
     return interaction.editReply(`❌ Couldn't change their roles: ${err.message}`);
   }
 
+  // Double-check against Discord: when going to member, the base staff role must be gone
+  let staffRoleStuck = false;
+  if (!newEntry) {
+    const fresh = await guild.members.fetch({ user: targetUser.id, force: true }).catch(() => null);
+    if (fresh && fresh.roles.cache.has(staffBase.id)) {
+      await fresh.roles.remove(staffBase, reason).catch(err => console.error(`[${mode}] Retry removing staff role failed:`, err));
+      const again = await guild.members.fetch({ user: targetUser.id, force: true }).catch(() => null);
+      staffRoleStuck = !!again && again.roles.cache.has(staffBase.id);
+    }
+  }
+
   // ---- announcement ----
   const fromText = current ? current.role.name : "member";
   const toText = newEntry ? newEntry.role.name : "member";
@@ -151,7 +162,8 @@ async function runRoleChange(interaction, mode) {
 
   const summary =
     `${isPromo ? "✅ Promoted" : "✅ Demoted"} ${targetUser}: ${fromText} ➜ ${toText}` +
-    (posted ? "" : `\n⚠️ Roles were changed, but I couldn't post in <#${PROMO_CHANNEL_ID}> (check my permissions there).`);
+    (posted ? "" : `\n⚠️ Roles were changed, but I couldn't post in <#${PROMO_CHANNEL_ID}> (check my permissions there).`)
+    + (staffRoleStuck ? `\n⚠️ The **${staffBase.name}** role is still on them — something else (another bot or role sync) may be adding it back.` : "");
 
   return interaction.editReply({ content: summary, allowedMentions: { parse: [] } });
 }
