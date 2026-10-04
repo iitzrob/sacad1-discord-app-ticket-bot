@@ -118,8 +118,8 @@ async function runRoleChange(interaction, mode) {
   }
 
   // ---- announcement ----
-  const fromText = current ? `<@&${current.role.id}>` : "member";
-  const toText = newEntry ? `<@&${newEntry.role.id}>` : "member";
+  const fromText = current ? current.role.name : "member";
+  const toText = newEntry ? newEntry.role.name : "member";
   const emoji = isPromo ? UPVOTE_EMOJI : DOWNVOTE_EMOJI;
 
   const message = `${targetUser}\n${emoji} ${fromText} ➜ ${toText}`;
