@@ -42,14 +42,17 @@ function buildActions() {
 }
 
 function idsFrom(rule) {
-  return (rule?.triggerMetadata?.keywordFilter || [])
+  // De-duplicated: the same person can be in the rule more than once
+  // (e.g. <@id> and <@!id>), and Discord rejects duplicate button ids.
+  return [...new Set((rule?.triggerMetadata?.keywordFilter || [])
     .map(k => k.replace(/[^0-9]/g, ""))
-    .filter(Boolean);
+    .filter(Boolean))];
 }
 
 async function addProtection(guild, rule, userId, byTag) {
   const keyword = `<@${userId}>`;
-  const next = [...(rule?.triggerMetadata?.keywordFilter || []), keyword];
+  const existing = rule?.triggerMetadata?.keywordFilter || [];
+  const next = existing.some(k => k.replace(/[^0-9]/g, "") === userId) ? existing : [...existing, keyword];
   if (!rule) {
     await guild.autoModerationRules.create({
       name: RULE_NAME,
@@ -73,10 +76,10 @@ async function addProtection(guild, rule, userId, byTag) {
 
 async function removeProtection(guild, userId, byTag) {
   const rule = await findRule(guild);
-  const keyword = `<@${userId}>`;
   const current = rule?.triggerMetadata?.keywordFilter || [];
-  if (!rule || !current.includes(keyword)) return;
-  const next = current.filter(k => k !== keyword);
+  if (!rule || !current.some(k => k.replace(/[^0-9]/g, "") === userId)) return;
+  // Drop every entry for this person, including duplicates.
+  const next = current.filter(k => k.replace(/[^0-9]/g, "") !== userId);
   if (!next.length) {
     // AutoMod won't keep a keyword rule with no keywords, so remove the rule.
     await rule.delete(`Last ping protection removed by ${byTag}`);
