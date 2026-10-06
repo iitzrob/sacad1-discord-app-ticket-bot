@@ -12,8 +12,8 @@ const { isAdmin } = require("../utils");
 //
 //  • /ping protect user:@someone  -> "@someone now has ping protection!"
 //  • Run it again (with that same user, or with no user) -> a private panel
-//    with one button per protected user. Press a user to remove their
-//    protection.
+//    that lists EVERYONE who has protection, with one button per user.
+//    Press a user to remove their protection.
 //
 // Uses Discord's built-in AutoMod. The bot keeps ONE keyword rule
 // ("Ping Protection") and every protected user is stored in it as <@id>.
@@ -88,6 +88,18 @@ async function removeProtection(guild, userId, byTag) {
   }
 }
 
+// Names of everyone protected (bulleted list) so you can see them all,
+// even past the 25 buttons Discord allows on one message.
+async function describe(client, ids) {
+  const lines = [];
+  for (const id of ids.slice(0, 40)) {
+    const user = await client.users.fetch(id).catch(() => null);
+    lines.push(`• @${user?.username || id}`);
+  }
+  if (ids.length > 40) lines.push(`…and ${ids.length - 40} more`);
+  return lines.join("\n");
+}
+
 // One button per protected user (max 25 = 5 rows x 5).
 async function buildPanel(client, ids) {
   const rows = [];
@@ -109,13 +121,22 @@ async function buildPanel(client, ids) {
   return rows;
 }
 
+async function panelPayload(client, ids, intro) {
+  const note = ids.length > 25 ? "\n\n_Buttons show the first 25. Remove some to reach the rest._" : "";
+  return {
+    content: `${intro}\n\n**Ping protected (${ids.length}):**\n${await describe(client, ids)}${note}`,
+    components: await buildPanel(client, ids),
+    allowedMentions: NO_PINGS
+  };
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("ping")
     .setDescription("Ping protection")
     .addSubcommand(s => s
       .setName("protect")
-      .setDescription("Protects a user from being pinged")
+      .setDescription("Protect a user from pings, or open the list to remove protection")
       .addUserOption(o => o.setName("user").setDescription("User to protect").setRequired(false))),
 
   async execute(interaction) {
@@ -127,30 +148,30 @@ module.exports = {
     const user = interaction.options.getUser("user");
 
     try {
-      // Give a user protection: public reply, nothing else in it.
-      if (user) {
+      // Look up who is protected BEFORE replying, so we know whether to
+      // answer publicly (new protection) or privately (the removal panel).
+      const rule = await findRule(guild);
+      const ids = idsFrom(rule);
+
+      // New user -> public "now has ping protection!" and nothing else.
+      if (user && !ids.includes(user.id)) {
         await interaction.deferReply();
-        const rule = await findRule(guild);
-        const ids = idsFrom(rule);
-
-        if (!ids.includes(user.id)) {
-          await addProtection(guild, rule, user.id, interaction.user.tag);
-          return interaction.editReply({
-            content: `@${user.username} now has ping protection!`,
-            allowedMentions: NO_PINGS
-          });
-        }
-
-        // Already protected -> swap the public reply for a private panel.
-        await interaction.deleteReply().catch(() => {});
-        return showPanel(interaction, ids, true);
+        await addProtection(guild, rule, user.id, interaction.user.tag);
+        return interaction.editReply({
+          content: `@${user.username} now has ping protection!`,
+          allowedMentions: NO_PINGS
+        });
       }
 
-      // No user given -> private panel of everyone protected.
-      await interaction.deferReply({ flags: 64 });
-      const ids = idsFrom(await findRule(guild));
-      if (!ids.length) return interaction.editReply("Nobody is ping protected.");
-      return showPanel(interaction, ids, false);
+      // Already protected, or no user given -> private list of everyone protected.
+      if (!ids.length) {
+        return interaction.reply({ content: "Nobody is ping protected.", flags: 64 });
+      }
+      const intro = user
+        ? `🛡️ @${user.username} already has ping protection. Press a user to **remove** their protection:`
+        : "🛡️ Press a user to **remove** their ping protection:";
+      await interaction.reply({ ...(await panelPayload(interaction.client, ids, intro)), flags: 64 });
+      return watchPanel(interaction);
     } catch (err) {
       console.error("/ping failed:", err);
       const msg = "❌ Couldn't update AutoMod — make sure I have **Manage Server** and **Moderate Members**.";
@@ -160,15 +181,8 @@ module.exports = {
   }
 };
 
-async function showPanel(interaction, ids, viaFollowUp) {
-  const payload = {
-    content: "🛡️ Press a user to **remove** their ping protection:",
-    components: await buildPanel(interaction.client, ids),
-    allowedMentions: NO_PINGS
-  };
-  const msg = viaFollowUp
-    ? await interaction.followUp({ ...payload, flags: 64 })
-    : await interaction.editReply(payload);
+async function watchPanel(interaction) {
+  const msg = await interaction.fetchReply();
 
   const collector = msg.createMessageComponentCollector({
     componentType: ComponentType.Button,
@@ -189,13 +203,13 @@ async function showPanel(interaction, ids, viaFollowUp) {
     const left = idsFrom(await findRule(interaction.guild));
     if (!left.length) {
       collector.stop("empty");
-      return b.update({ content: `✅ ${name} no longer has ping protection.`, components: [], allowedMentions: NO_PINGS });
+      return b.update({ content: `✅ ${name} no longer has ping protection.\n\nNobody is ping protected now.`, components: [], allowedMentions: NO_PINGS });
     }
-    return b.update({
-      content: `✅ ${name} no longer has ping protection.\n\n🛡️ Press another user to remove theirs:`,
-      components: await buildPanel(interaction.client, left),
-      allowedMentions: NO_PINGS
-    });
+    return b.update(await panelPayload(
+      interaction.client,
+      left,
+      `✅ ${name} no longer has ping protection.\n\n🛡️ Press another user to remove theirs:`
+    ));
   });
 
   collector.on("end", (_c, reason) => {
