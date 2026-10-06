@@ -38,6 +38,8 @@ const {
   mergeSelectionIntoIds: mergeTrackerSelectionIntoIds
 } = require("./commands/tracker-start");
 
+const legit = require("./legit");
+
 // channelId -> claimer's user id. Lives in ./ticketClaims (not a local Map
 // here) so commands/close.js can read the same claim lock the buttons use.
 const { getClaim, setClaim, deleteClaim } = require("./ticketClaims");
@@ -248,9 +250,10 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.DirectMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMessageReactions
   ],
-  partials: [Partials.Channel, Partials.Message],
+  partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User],
 
   // Keep memory low: a small message cache, and skip caches this bot never
   // uses. The member cache is left alone on purpose - /tracker-start relies
@@ -311,6 +314,7 @@ process.on("unhandledRejection", err => console.error("Unhandled rejection:", er
 // `node deploy-commands.js` afterwards so Discord knows about it.
 // =====================================================================
 client.commands = new Collection();
+legit.init(client); // /are-we-legit reaction handling
 
 const commandsPath = path.join(__dirname, "commands");
 const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith(".js"));
@@ -632,6 +636,7 @@ client.on("interactionCreate", async i => {
         ]
       });
       touchActivity(c.id);
+      if (t === "help") legit.noteHelpTicket(client, i.user.id); // clears their 'Are we legit' no-vote
 
       // For giveaway tickets, parse "How much did you win?" (q0) into a
       // plain number so the amount check can use it, and so the embed
