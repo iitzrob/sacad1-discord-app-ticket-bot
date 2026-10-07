@@ -5,8 +5,7 @@ const { sendHoneypotPanel } = require("../honeypot");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("honey-pot")
-    .setDescription("Send a bot-trap panel in this channel — anyone but staff who types here gets 7-day banned"),
-
+    .setDescription("Set up a honeypot")
   async execute(interaction) {
     if (!isStaff(interaction.member)) {
       return interaction.reply({ content: "No permission.", ephemeral: true });
