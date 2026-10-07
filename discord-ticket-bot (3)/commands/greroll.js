@@ -7,7 +7,7 @@ const { findGiveaway, rerollGiveaway } = require("../giveaways");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("greroll")
-    .setDescription("Pick new winners for an ended giveaway — staff only")
+    .setDescription("Reroll a giveaway")
     .addStringOption(opt =>
       opt.setName("prize")
         .setDescription("The prize of the ended giveaway to reroll")
