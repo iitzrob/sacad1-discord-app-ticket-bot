@@ -101,7 +101,10 @@ async function repost(channelId) {
 function handleMessageForSticky(message) {
   const sticky = stickies.get(message.channelId);
   if (!sticky) return;
+  // Ignore the sticky's own post. Compare by content too, because Discord can
+  // deliver the event before we've saved the new message id (that caused a loop).
   if (message.id === sticky.messageId) return;
+  if (message.author?.id === client?.user?.id && message.content === sticky.content && !message.embeds.length) return;
 
   clearTimeout(timers.get(message.channelId));
   timers.set(message.channelId, setTimeout(async () => {
