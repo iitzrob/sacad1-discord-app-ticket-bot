@@ -5,7 +5,7 @@ const { getGuildTrackers } = require("../tracker");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("tracker-list")
-    .setDescription("List active weekly trackers — admin only"),
+    .setDescription("	List trackers"),
 
   async execute(interaction) {
     if (!isAdmin(interaction.member)) {
