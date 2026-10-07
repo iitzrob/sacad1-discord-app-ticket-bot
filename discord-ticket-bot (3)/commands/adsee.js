@@ -104,7 +104,7 @@ function buildRecipientPanels(c) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("adsee")
-    .setDescription("See how many members an ad was sent to, and who")
+    .setDescription("See who an ad reached")
     .addStringOption(o =>
       o.setName("ad")
         .setDescription("The ad that was bought, e.g. Members;30")
