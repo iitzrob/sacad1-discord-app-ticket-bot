@@ -5,7 +5,7 @@ const { sendServiceTicketPanel } = require("../service-tickets");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("service-ticket-panel")
-    .setDescription("Send the build/service ticket panel (Digout + Base Building)")
+    .setDescription("send the build panel")
     .addChannelOption(o => o.setName("channel").setDescription("Channel to send it in (defaults to this channel)").addChannelTypes(ChannelType.GuildText).setRequired(false)),
 
   async execute(interaction) {
