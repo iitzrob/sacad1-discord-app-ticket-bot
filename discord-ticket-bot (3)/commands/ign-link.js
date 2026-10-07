@@ -5,7 +5,7 @@ const { sendIGNPanel } = require("../ign");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("ign-link")
-    .setDescription("Send the Minecraft IGN link panel")
+    .setDescription("Send the IGN panel")
     .addChannelOption(o =>
       o.setName("channel")
         .setDescription("Channel to send it in (defaults to this channel)")
