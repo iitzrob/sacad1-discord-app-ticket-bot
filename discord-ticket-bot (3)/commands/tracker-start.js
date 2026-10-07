@@ -77,7 +77,7 @@ function buildStepOneContent(guild, selection) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("tracker-start")
-    .setDescription("Start a new weekly tracker (claims/closes/renames/sponsors) — admin only"),
+    .setDescription("	Start a tracker"),
 
   async execute(interaction) {
     if (!isAdmin(interaction.member)) {
