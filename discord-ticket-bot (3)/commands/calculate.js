@@ -86,7 +86,7 @@ function evaluate(expr) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("calculate")
-    .setDescription("A simple calculator")
+    .setDescription("Quick calculator")
     .addStringOption(o => o.setName("expression").setDescription("e.g. 5 + 3 * 2, (10-4)/2, 2^3").setRequired(true)),
 
   async execute(interaction) {
