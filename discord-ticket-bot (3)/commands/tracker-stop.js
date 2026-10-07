@@ -5,7 +5,7 @@ const { getGuildTrackers } = require("../tracker");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("tracker-stop")
-    .setDescription("Stop and remove a weekly tracker — admin only"),
+    .setDescription("	Stop a tracker"),
 
   async execute(interaction) {
     if (!isAdmin(interaction.member)) {
