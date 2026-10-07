@@ -102,7 +102,7 @@ function expiredEmbed({ answer, guessCount, guesserCount }) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("guessthenumber")
-    .setDescription(`Start an open guessing game (1-${DEFAULT_MAX_NUMBER} by default) anyone in the channel can join`)
+    .setDescription(`Start a guessing game`)
     .addIntegerOption((option) =>
       option
         .setName("max")
