@@ -687,9 +687,9 @@ client.on("interactionCreate", async i => {
             });
           }
         } else {
-          emb.addFields({
+          emb.setColor("#F1C40F").addFields({
             name: "Claim Check",
-            value: "⏳ No amount given yet — once they type it in the ticket, I'll check automatically."
+            value: "🤔 Couldn't find a giveaway with that name. Staff can still verify manually."
           });
         }
       }
