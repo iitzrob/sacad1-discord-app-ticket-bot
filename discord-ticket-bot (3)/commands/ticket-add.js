@@ -5,7 +5,7 @@ const config = require("../config");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("ticket-add")
-    .setDescription("Add someone to the current ticket (view + chat only — they can't claim/close/unclaim)")
+    .setDescription("Add someone to this ticket")
     .addUserOption(o => o.setName("user").setDescription("The user to add").setRequired(true)),
 
   async execute(interaction) {
