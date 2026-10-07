@@ -28,7 +28,7 @@ function resolveColor(input) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("embed")
-    .setDescription("Send an embed (or plain text) message to this channel")
+    .setDescription("Send an embed")
     .addStringOption(o =>
       o.setName("description")
         .setDescription("The main text of the message")
