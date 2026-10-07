@@ -5,7 +5,7 @@ const { sendApplicationPanel } = require("../applications");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("application-panel")
-    .setDescription("Send the Staff & Builder application panel")
+    .setDescription("Send the application panel")
     .addChannelOption(o => o.setName("channel").setDescription("Channel to send it in (defaults to this channel)").addChannelTypes(ChannelType.GuildText).setRequired(false)),
 
   async execute(interaction) {
