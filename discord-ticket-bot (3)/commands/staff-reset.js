@@ -6,7 +6,7 @@ const { refreshCard, refreshAllCards } = require("../statsCards");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("staff-reset")
-    .setDescription("Reset tracked stats (claims/closes/sponsored) — admin only")
+    .setDescription("	Reset staff stats")
     .addSubcommand(sub => sub
       .setName("user")
       .setDescription("Reset one user's stats")
