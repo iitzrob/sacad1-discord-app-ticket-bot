@@ -96,13 +96,22 @@ async function repost(channelId) {
   }
 }
 
-// Called for every guild message that isn't the bot's own.
+// Called for every guild message, including the bot's own (welcome messages,
+// etc). Only the sticky's own message is ignored, so it can't loop.
 function handleMessageForSticky(message) {
-  if (!stickies.has(message.channelId)) return;
+  const sticky = stickies.get(message.channelId);
+  if (!sticky) return;
+  // Ignore the sticky's own post. Compare by content too, because Discord can
+  // deliver the event before we've saved the new message id (that caused a loop).
+  if (message.id === sticky.messageId) return;
+  if (message.author?.id === client?.user?.id && message.content === sticky.content && !message.embeds.length) return;
 
   clearTimeout(timers.get(message.channelId));
-  timers.set(message.channelId, setTimeout(() => {
+  timers.set(message.channelId, setTimeout(async () => {
     timers.delete(message.channelId);
+    // If a repost is mid-flight, wait for it, then repost again so the
+    // sticky still ends up at the bottom.
+    while (busy.has(message.channelId)) await new Promise(r => setTimeout(r, 300));
     repost(message.channelId);
   }, DELAY_MS));
 }
