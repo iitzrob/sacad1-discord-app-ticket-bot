@@ -7,7 +7,7 @@ const { buildCreateModal } = require("../giveaways");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("gcreate")
-    .setDescription("Start a giveaway — staff only"),
+    .setDescription("Start a giveaway"),
 
   async execute(interaction) {
     if (!isStaff(interaction.member)) {
