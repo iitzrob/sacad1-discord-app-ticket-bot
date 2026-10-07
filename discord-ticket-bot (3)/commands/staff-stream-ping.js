@@ -28,7 +28,7 @@ function writeLast(ts) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("staff-stream-ping")
-    .setDescription("Pings the stream staff role"),
+    .setDescription("	Ping staff streams"),
 
   async execute(interaction) {
     if (!interaction.guild || !isStaff(interaction.member)) {
