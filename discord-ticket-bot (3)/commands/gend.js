@@ -6,7 +6,7 @@ const { findGiveaway, endGiveaway } = require("../giveaways");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("gend")
-    .setDescription("End a giveaway early — staff only")
+    .setDescription("End a giveaway")
     .addStringOption(opt =>
       opt.setName("prize")
         .setDescription("The prize of the giveaway to end")
