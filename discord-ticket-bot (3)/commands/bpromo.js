@@ -4,7 +4,7 @@ const { runRoleChange, PROMO_CHOICES } = require("../builderRoles");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("bpromo")
-    .setDescription("Promote a member to a builder role — max perms only")
+    .setDescription("	Promote a builder")
     .addUserOption(o => o.setName("user").setDescription("Who to promote").setRequired(true))
     .addStringOption(o => o
       .setName("role")
