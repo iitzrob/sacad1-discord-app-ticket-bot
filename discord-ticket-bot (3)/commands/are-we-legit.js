@@ -5,7 +5,7 @@ const { sendLegitPoll } = require("../legit");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("are-we-legit")
-    .setDescription("Post the 'Are we legit' vote in this channel"),
+    .setDescription("Post the legit vote"),
 
   async execute(interaction) {
     if (!interaction.guild || !isAdmin(interaction.member)) {
