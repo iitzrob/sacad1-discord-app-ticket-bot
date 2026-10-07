@@ -92,7 +92,7 @@ function expiredEmbed() {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("coinflip")
-    .setDescription("Call heads or tails and flip a coin"),
+    .setDescription("Flip a coin"),
 
   async execute(interaction) {
     const user = interaction.user;
