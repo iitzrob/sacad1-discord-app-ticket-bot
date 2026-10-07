@@ -4,7 +4,7 @@ const { runRoleChange, DEMO_CHOICES } = require("../promoRoles");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("demo")
-    .setDescription("Demote a staff member to a lower role — max perms only")
+    .setDescription("Demote a staff member")
     .addUserOption(o => o.setName("user").setDescription("Who to demote").setRequired(true))
     .addStringOption(o => o
       .setName("role")
