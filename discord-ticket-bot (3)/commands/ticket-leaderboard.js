@@ -7,7 +7,7 @@ const { buildLeaderboardEmbed, buildLeaderboardMenu } = require("../stats");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("ticket-leaderboard")
-    .setDescription("Show the ticket leaderboard (claims, closes, or renames)"),
+    .setDescription("	Ticket leaderboard"),
 
   async execute(interaction) {
     const embed = await buildLeaderboardEmbed(interaction.client, "claims");
