@@ -21,6 +21,7 @@ const {
 } = require("./applications");
 const { recordDeletedMessage, getSnipe, buildSnipeEmbed } = require("./snipe");
 const { handleMessageForSticky } = require("./sticky");
+const autoping = require("./autoping");
 const { setAfk, clearAfk, getAfk } = require("./afk");
 const { getPrefix } = require("./prefixConfig");
 const { recordClaim, recordClose } = require("./stats");
@@ -314,6 +315,7 @@ process.on("unhandledRejection", err => console.error("Unhandled rejection:", er
 // `node deploy-commands.js` afterwards so Discord knows about it.
 // =====================================================================
 client.commands = new Collection();
+require("./sticky").init(client);
 legit.init(client); // /are-we-legit reaction handling
 
 const commandsPath = path.join(__dirname, "commands");
@@ -1075,6 +1077,7 @@ client.on("interactionCreate", async i => {
 client.on("guildMemberAdd", member => {
   sendWelcomeMessage(member).catch(err => console.error("Failed to send welcome message:", err));
   handleMemberJoinAds(member).catch(err => console.error("Failed to send join ad(s):", err));
+  autoping.handleJoin(member).catch(err => console.error("Auto ping failed:", err));
 });
 
 // =====================================================================
@@ -1089,9 +1092,9 @@ client.on("messageDelete", message => {
 // whenever someone else sends a message
 // =====================================================================
 client.on("messageCreate", message => {
-  if (message.author.bot) return;
+  if (message.author.id === client.user.id) return;
   if (!message.guild) return;
-  handleMessageForSticky(message).catch(err => console.error("Sticky repost failed:", err));
+  handleMessageForSticky(message);
 });
 
 // =====================================================================
