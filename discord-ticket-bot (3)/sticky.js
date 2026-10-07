@@ -1,22 +1,62 @@
 // =====================================================================
 // STICKY MESSAGES
-// /sticky posts a plain-text message that stays at the bottom of the
-// channel: every time someone else sends a message, the old sticky is
-// deleted and a fresh copy is posted underneath it. /unstick removes it.
+// /sticky posts a message that stays at the bottom of the channel. After
+// people stop talking for a moment, the old copy is deleted and a fresh one
+// is posted underneath. /unstick removes it.
 //
-// Storage is in-memory only (a Map), so stickies are lost on restart —
-// re-run /sticky after a restart if you need them to persist.
+// Saved in data/stickies.json, so stickies survive restarts.
 // =====================================================================
+const fs = require("fs");
+const path = require("path");
 
-// channelId -> { content, messageId, posting, pending }
+const DATA_FILE = path.join(__dirname, "data", "stickies.json");
+const DELAY_MS = 2500; // wait for chat to settle before reposting
+
+// channelId -> { content, messageId }
 const stickies = new Map();
+const timers = new Map();
+const busy = new Set();
+let client = null;
+
+function load() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
+    for (const [id, s] of Object.entries(raw)) stickies.set(id, s);
+  } catch {}
+}
+
+function save() {
+  try {
+    fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
+    const tmp = DATA_FILE + ".tmp";
+    fs.writeFileSync(tmp, JSON.stringify(Object.fromEntries(stickies), null, 2));
+    fs.renameSync(tmp, DATA_FILE);
+  } catch (err) {
+    console.error("Failed to save stickies.json:", err);
+  }
+}
+
+load();
+
+function init(c) {
+  client = c;
+}
+
+async function getChannel(id) {
+  return client?.channels.cache.get(id) ?? client?.channels.fetch(id).catch(() => null);
+}
+
+async function deleteOld(channel, messageId) {
+  if (!messageId) return;
+  const old = await channel.messages.fetch(messageId).catch(() => null);
+  if (old) await old.delete().catch(() => {});
+}
 
 async function setSticky(channel, content) {
-  // Replace any existing sticky in this channel first.
   await removeSticky(channel);
-
   const message = await channel.send({ content });
-  stickies.set(channel.id, { content, messageId: message.id, posting: false, pending: false });
+  stickies.set(channel.id, { content, messageId: message.id });
+  save();
   return message;
 }
 
@@ -24,11 +64,12 @@ async function removeSticky(channel) {
   const sticky = stickies.get(channel.id);
   if (!sticky) return false;
 
+  clearTimeout(timers.get(channel.id));
+  timers.delete(channel.id);
   stickies.delete(channel.id);
+  save();
 
-  const old = await channel.messages.fetch(sticky.messageId).catch(() => null);
-  if (old) await old.delete().catch(() => {});
-
+  await deleteOld(channel, sticky.messageId);
   return true;
 }
 
@@ -36,44 +77,34 @@ function hasSticky(channelId) {
   return stickies.has(channelId);
 }
 
-// Deletes the current sticky message and posts a fresh copy underneath
-// whatever was just sent, so it always ends up at the very bottom.
-async function repost(channel, sticky) {
-  sticky.posting = true;
-  try {
-    const old = await channel.messages.fetch(sticky.messageId).catch(() => null);
-    if (old) await old.delete().catch(() => {});
+async function repost(channelId) {
+  const sticky = stickies.get(channelId);
+  if (!sticky || busy.has(channelId)) return;
 
+  busy.add(channelId);
+  try {
+    const channel = await getChannel(channelId);
+    if (!channel) return;
+    await deleteOld(channel, sticky.messageId);
     const fresh = await channel.send({ content: sticky.content });
     sticky.messageId = fresh.id;
+    save();
   } catch (err) {
-    console.error(`Failed to repost sticky in #${channel?.name}:`, err);
+    console.error(`Sticky repost failed in ${channelId}:`, err.message);
   } finally {
-    sticky.posting = false;
-    // If more messages came in while we were reposting, do one more
-    // repost right after this one finishes, so the sticky still ends up
-    // at the bottom instead of getting left behind during busy chat.
-    if (sticky.pending) {
-      sticky.pending = false;
-      await repost(channel, sticky);
-    }
+    busy.delete(channelId);
   }
 }
 
-// Called for every non-bot guild message; reposts the sticky underneath
-// it if the channel has one.
-async function handleMessageForSticky(message) {
-  const sticky = stickies.get(message.channelId);
-  if (!sticky) return;
+// Called for every guild message that isn't the bot's own.
+function handleMessageForSticky(message) {
+  if (!stickies.has(message.channelId)) return;
 
-  if (sticky.posting) {
-    // A repost is already in flight — don't stack calls, just make sure
-    // one more happens right after it, so we don't fall behind.
-    sticky.pending = true;
-    return;
-  }
-
-  await repost(message.channel, sticky);
+  clearTimeout(timers.get(message.channelId));
+  timers.set(message.channelId, setTimeout(() => {
+    timers.delete(message.channelId);
+    repost(message.channelId);
+  }, DELAY_MS));
 }
 
-module.exports = { setSticky, removeSticky, hasSticky, handleMessageForSticky };
+module.exports = { init, setSticky, removeSticky, hasSticky, handleMessageForSticky };
