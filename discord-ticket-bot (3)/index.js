@@ -1092,7 +1092,6 @@ client.on("messageDelete", message => {
 // whenever someone else sends a message
 // =====================================================================
 client.on("messageCreate", message => {
-  if (message.author.id === client.user.id) return;
   if (!message.guild) return;
   handleMessageForSticky(message);
 });
