@@ -27,17 +27,10 @@ const { getPrefix } = require("./prefixConfig");
 const { recordClaim, recordClose } = require("./stats");
 const { buildLeaderboardEmbed, buildLeaderboardMenu } = require("./stats");
 const { refreshCard } = require("./statsCards");
-const {
-  createTracker, recordTrackerEvent, stopTracker, startWeeklyResetScheduler
-} = require("./tracker");
+const lb = require("./lb");
 const { getLockSnapshot, setLockSnapshot, deleteLockSnapshot } = require("./locks");
 const { handleHoneypotMessage, checkExpiredHoneypotBans } = require("./honeypot");
 const { touchActivity, getLastActivity, deleteActivity } = require("./ticketActivity");
-const {
-  buildStepOneComponents: buildTrackerStepOneComponents,
-  buildStepOneContent: buildTrackerStepOneContent,
-  mergeSelectionIntoIds: mergeTrackerSelectionIntoIds
-} = require("./commands/tracker-start");
 
 const legit = require("./legit");
 
@@ -47,16 +40,6 @@ const { getClaim, setClaim, deleteClaim } = require("./ticketClaims");
 const { getIGN, findByIGN, setIGN, logIGNEvent } = require("./ign");
 const { parseAmount, findGiveawayWin, formatAmountShort } = require("./giveawayChecker");
 const { isGiveawayChecked, markGiveawayChecked } = require("./giveawayChecks");
-
-// staffUserId -> { userIds, roleIds }, held while the admin is still
-// picking users/roles in step 1 of /tracker-start.
-const pendingTrackerSelection = new Map();
-
-// staffUserId -> final deduplicated array of member IDs, held between the
-// "Continue" button (end of step 1) and the channel-ID modal step of
-// /tracker-start. In-memory only — if the bot restarts mid-setup, the
-// admin just has to run it again.
-const pendingTrackerSetup = new Map();
 
 const LOCK_PERMS = ["SendMessages"];
 
@@ -120,7 +103,7 @@ async function performTicketClose(guild, channel, closedByUser, reason, opts = {
   if (!auto) {
     recordClose(closedByUser.id);
     refreshCard(client, closedByUser.id).catch(() => {});
-    recordTrackerEvent(client, guild.id, closedByUser.id, "closes").catch(() => {});
+    lb.recordLbEvent(client, guild.id, closedByUser.id, "closes").catch(() => {});
   }
 
   try {
@@ -286,7 +269,7 @@ const client = new Client({
       interval: 600,
       filter: () => {
         const primedRecently = Date.now() - (client.membersPrimedAt || 0) < 15 * 60 * 1000;
-        if (primedRecently || pendingTrackerSelection.size || pendingTrackerSetup.size) return null;
+        if (primedRecently) return null;
         return (member) => member.id !== member.client.user.id;
       }
     }
@@ -337,7 +320,7 @@ client.once("ready", () => {
   console.log(`Ready — loaded ${client.commands.size} command(s): ${[...client.commands.keys()].join(", ")}`);
   console.log("Note: slash commands are registered via `node deploy-commands.js`, not on startup.");
   client.user.setActivity("discord.gg/sacad1", { type: ActivityType.Watching });
-  startWeeklyResetScheduler(client);
+  lb.startWeeklyResetScheduler();
 
   // Memory report (temporary, for finding out where RAM goes): once after
   // 2 minutes, then every 10 minutes. Search the logs for "[MEM]". "afterGC"
@@ -395,84 +378,9 @@ client.on("interactionCreate", async i => {
     return;
   }
 
-  // ---- Tracker: step 1 selects — users and/or roles (/tracker-start) ----
-  if ((i.isUserSelectMenu() && i.customId === "tracker_select_users") ||
-      (i.isRoleSelectMenu() && i.customId === "tracker_select_roles")) {
-    const selection = pendingTrackerSelection.get(i.user.id) || { userIds: [], roleIds: [] };
-    if (i.customId === "tracker_select_users") selection.userIds = i.values;
-    else selection.roleIds = i.values;
-    pendingTrackerSelection.set(i.user.id, selection);
-
-    return i.update({
-      content: buildTrackerStepOneContent(i.guild, selection),
-      components: buildTrackerStepOneComponents()
-    });
-  }
-
-  // ---- Tracker: step 1 cancel (/tracker-start) ----
-  if (i.isButton() && i.customId === "tracker_cancel") {
-    pendingTrackerSelection.delete(i.user.id);
-    return i.update({ content: "❌ Tracker setup cancelled.", components: [] });
-  }
-
-  // ---- Tracker: step 1 continue -> step 2 channel modal (/tracker-start) ----
-  if (i.isButton() && i.customId === "tracker_continue") {
-    const selection = pendingTrackerSelection.get(i.user.id) || { userIds: [], roleIds: [] };
-    const mergedIds = [...mergeTrackerSelectionIntoIds(i.guild, selection)];
-
-    if (!mergedIds.length) {
-      return i.reply({
-        content: "❌ Select at least one user, or a role that has members, before continuing.",
-        ephemeral: true
-      });
-    }
-
-    pendingTrackerSelection.delete(i.user.id);
-    pendingTrackerSetup.set(i.user.id, mergedIds);
-
-    const modal = new ModalBuilder().setCustomId("tracker_channel_modal").setTitle("Tracker channel");
-    modal.addComponents(new ActionRowBuilder().addComponents(
-      new TextInputBuilder()
-        .setCustomId("channel_id")
-        .setLabel("Channel ID to post the tracker in")
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true)
-        .setPlaceholder("e.g. 123456789012345678")
-    ));
-    return i.showModal(modal);
-  }
-
-  // ---- Tracker: channel modal submit (/tracker-start step 2) ----
-  if (i.isModalSubmit() && i.customId === "tracker_channel_modal") {
-    const userIds = pendingTrackerSetup.get(i.user.id);
-    if (!userIds) {
-      return i.reply({ content: "❌ That setup expired — please run `/tracker-start` again.", ephemeral: true });
-    }
-
-    const channelId = i.fields.getTextInputValue("channel_id").trim();
-    const channel = await i.guild.channels.fetch(channelId).catch(() => null);
-    if (!channel || !channel.isTextBased()) {
-      return i.reply({ content: "❌ Couldn't find a text channel with that ID in this server.", ephemeral: true });
-    }
-
-    pendingTrackerSetup.delete(i.user.id);
-    try {
-      await createTracker(client, i.guild, channel.id, userIds, i.user.id);
-      return i.reply({ content: `✅ Tracker started — posting live in ${channel} and tracking ${userIds.length} user(s).`, ephemeral: true });
-    } catch (err) {
-      console.error("Failed to create tracker:", err);
-      return i.reply({ content: "❌ Something went wrong creating the tracker — check that I have permission to send messages in that channel, then check the logs.", ephemeral: true });
-    }
-  }
-
-  // ---- Tracker: stop select (/tracker-stop) ----
-  if (i.isStringSelectMenu() && i.customId === "tracker_stop_select") {
-    const trackerId = i.values[0];
-    const removed = await stopTracker(client, trackerId);
-    return i.update({
-      content: removed ? `🛑 Stopped tracker \`${trackerId}\`.` : "❌ That tracker no longer exists.",
-      components: []
-    });
+  // ---- Staff leaderboard buttons (/staff lb) ----
+  if (i.isButton() && i.customId.startsWith("lb_")) {
+    return i.update(lb.buildLbMessage(i.customId.slice(3)));
   }
 
   // ---- Ticket leaderboard select ----
@@ -801,7 +709,7 @@ client.on("interactionCreate", async i => {
       setClaim(i.channelId, i.user.id);
       recordClaim(i.user.id);
       refreshCard(client, i.user.id).catch(() => {});
-      recordTrackerEvent(client, i.guild.id, i.user.id, "claims").catch(() => {});
+      lb.recordLbEvent(client, i.guild.id, i.user.id, "claims").catch(() => {});
       const e = EmbedBuilder.from(i.message.embeds[0]).setFooter({ text: `Claimed by ${i.user.tag}` });
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("unclaim").setLabel("Unclaim").setStyle(ButtonStyle.Secondary),
