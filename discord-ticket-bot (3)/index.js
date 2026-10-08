@@ -378,9 +378,9 @@ client.on("interactionCreate", async i => {
     return;
   }
 
-  // ---- Staff leaderboard buttons (/staff lb) ----
-  if (i.isButton() && i.customId.startsWith("lb_")) {
-    return i.update(lb.buildLbMessage(i.customId.slice(3)));
+  // ---- Staff leaderboard dropdown (/staff lb) ----
+  if (i.isStringSelectMenu() && i.customId === "lb_select") {
+    return i.update(lb.buildLbMessage(i.values[0]));
   }
 
   // ---- Ticket leaderboard select ----
