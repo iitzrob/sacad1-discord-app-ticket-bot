@@ -6,7 +6,7 @@ const config = require("../config");
 const { isStaff, isBuildStaff } = require("../utils");
 const { getClaim, setClaim } = require("../ticketClaims");
 const { recordClaim } = require("../stats");
-const { recordTrackerEvent } = require("../tracker");
+const { recordLbEvent } = require("../lb");
 const { logTicketEvent } = require("../tickets");
 
 function isServiceChannel(channel) {
@@ -65,7 +65,7 @@ module.exports = {
 
     setClaim(channel.id, interaction.user.id);
     recordClaim(interaction.user.id);
-    recordTrackerEvent(interaction.client, interaction.guild.id, interaction.user.id, "claims").catch(() => {});
+    recordLbEvent(interaction.client, interaction.guild.id, interaction.user.id, "claims").catch(() => {});
 
     // Best-effort: find the ticket's original claim/close card and update
     // it to match (footer + swap Claim -> Unclaim), same as the button does.
