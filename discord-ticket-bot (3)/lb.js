@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const {
-  EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle
+  EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder
 } = require("discord.js");
 const { formatMoney } = require("./stats");
 
@@ -9,7 +9,7 @@ const { formatMoney } = require("./stats");
 // WEEKLY STAFF LEADERBOARD (replaces the old tracker)
 //  - Tracks EVERYONE who claims / closes / renames / sponsors. No setup,
 //    no staff role needed to view it.
-//  - /staff lb opens it on Closes. Buttons switch to Claims / Renames /
+//  - /staff lb opens it on Closes. A dropdown switches to Claims / Renames /
 //    Sponsors. Footer shows when it was last updated. Yellow embed.
 //  - Resets automatically every week (Monday 00:00 Sydney time = the end
 //    of Sunday). Saved in data/lb.json so restarts never lose it.
@@ -58,7 +58,17 @@ async function recordLbSponsor(client, guildId, userId, amount) {
   save();
 }
 
-// ---------- The embed + buttons ----------
+// "08/10/2026 3:45 PM" (Sydney time)
+function formatUpdated(date = new Date()) {
+  const map = {};
+  for (const p of new Intl.DateTimeFormat("en-AU", {
+    timeZone: TIMEZONE, day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "numeric", minute: "2-digit", hour12: true
+  }).formatToParts(date)) map[p.type] = p.value;
+  return `${map.day}/${map.month}/${map.year} ${map.hour}:${map.minute} ${String(map.dayPeriod).toUpperCase()}`;
+}
+
+// ---------- The embed + menu ----------
 function buildLbEmbed(field) {
   const info = FIELDS[field] || FIELDS.closes;
   const key = FIELDS[field] ? field : "closes";
@@ -78,26 +88,27 @@ function buildLbEmbed(field) {
 
   return new EmbedBuilder()
     .setColor(COLOR)
-    .setTitle(`${info.emoji} Staff ${info.label} Leaderboard`)
+    .setTitle(`${info.emoji} ${info.label}`)
     .setDescription(lines.length ? lines.join("\n") : "No data yet.")
-    .setFooter({ text: `Last updated: ${new Date().toLocaleString("en-AU", { timeZone: TIMEZONE, dateStyle: "medium", timeStyle: "short" })}` });
+    .setFooter({ text: `Updated ${formatUpdated()}` });
 }
 
-function buildLbButtons(selected) {
+function buildLbMenu(selected) {
   return new ActionRowBuilder().addComponents(
-    ...Object.entries(FIELDS).map(([key, info]) =>
-      new ButtonBuilder()
-        .setCustomId(`lb_${key}`)
-        .setLabel(info.label)
-        .setEmoji(info.emoji)
-        .setStyle(key === selected ? ButtonStyle.Primary : ButtonStyle.Secondary)
-        .setDisabled(key === selected)
-    )
+    new StringSelectMenuBuilder()
+      .setCustomId("lb_select")
+      .setPlaceholder("Choose a leaderboard...")
+      .addOptions(Object.entries(FIELDS).map(([value, info]) => ({
+        label: info.label,
+        value,
+        emoji: info.emoji,
+        default: value === selected
+      })))
   );
 }
 
 function buildLbMessage(field) {
-  return { embeds: [buildLbEmbed(field)], components: [buildLbButtons(FIELDS[field] ? field : "closes")] };
+  return { embeds: [buildLbEmbed(field)], components: [buildLbMenu(FIELDS[field] ? field : "closes")] };
 }
 
 // ---------- Weekly reset: Monday 00:00 Sydney (end of Sunday) ----------
