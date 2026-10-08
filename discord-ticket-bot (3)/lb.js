@@ -75,16 +75,11 @@ function buildLbEmbed(field) {
     `${medals[i] || `**${i + 1}.**`} <@${id}> — **${value(n)}**`
   );
 
-  const weekStartUnix = Math.floor(new Date(data.weekStart).getTime() / 1000);
-  const nowUnix = Math.floor(Date.now() / 1000);
 
   return new EmbedBuilder()
     .setColor(COLOR)
     .setTitle(`${info.emoji} Staff ${info.label} Leaderboard`)
-    .setDescription(
-      (lines.length ? lines.join("\n") : "No data yet this week.") +
-      `\n\nWeek started <t:${weekStartUnix}:D> • resets every **Sunday at midnight** (Sydney time)`
-    )
+    .setDescription(lines.length ? lines.join("\n") : "No data yet.")
     .setFooter({ text: `Last updated: ${new Date().toLocaleString("en-AU", { timeZone: TIMEZONE, dateStyle: "medium", timeStyle: "short" })}` });
 }
 
