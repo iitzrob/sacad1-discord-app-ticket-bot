@@ -1,7 +1,7 @@
 const { SlashCommandBuilder } = require("discord.js");
 const { isBuildStaff } = require("../utils");
 const config = require("../config");
-const { recordTrackerEvent } = require("../tracker");
+const { recordLbEvent } = require("../lb");
 const { recordRename } = require("../stats");
 const { logTicketEvent } = require("../tickets");
 
@@ -36,7 +36,7 @@ module.exports = {
 
     await interaction.channel.setName(newName, `Renamed by ${interaction.user.tag}`);
     recordRename(interaction.user.id);
-    recordTrackerEvent(interaction.client, interaction.guild.id, interaction.user.id, "renames").catch(() => {});
+    recordLbEvent(interaction.client, interaction.guild.id, interaction.user.id, "renames").catch(() => {});
     await logTicketEvent(interaction.guild, {
       title: "Ticket Renamed",
       ticketChannel: interaction.channel,
