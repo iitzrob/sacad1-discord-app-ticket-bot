@@ -2,7 +2,8 @@ const fs = require("fs");
 const path = require("path");
 const {
   Client, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
-  ModalBuilder, TextInputBuilder, TextInputStyle
+  ModalBuilder, TextInputBuilder, TextInputStyle,
+  LabelBuilder, StringSelectMenuBuilder
 } = require("discord.js");
 
 // =====================================================================
@@ -19,6 +20,7 @@ const DATA_FILE = path.join(__dirname, "data", "giveaways.json");
 const MODAL_ID = "gw_create_modal";
 const ENTER_ID = "gw_enter";
 const EPHEMERAL = 64;
+const TAG_NAME = "Join"; // our server tag — entrants must have THIS server's tag equipped
 const MAX_WINNERS = 25;
 const MAX_DURATION_MS = 52 * 7 * 24 * 60 * 60 * 1000; // 52 weeks
 
@@ -101,6 +103,7 @@ function buildEmbed(g, iconURL) {
   const info = [
     `**${g.ended ? "Ended" : "Ends"}:** <t:${unix}:R> (<t:${unix}:f>)`,
     `**Hosted by:** <@${g.hostId}>`,
+    ...(g.tagRequired ? [`**Tag Required:** Yes`] : []),
     `**Entries:** ${g.entries.length}`,
     g.ended
       ? `**Winner(s):** ${g.winners.length ? g.winners.map(id => `<@${id}>`).join(", ") : "No valid entries"}`
@@ -166,6 +169,17 @@ function shuffle(arr) {
   return a;
 }
 
+// True when the user currently has THIS server's tag equipped (not another server's tag with the same name).
+async function hasServerTag(client, userId, guildId) {
+  try {
+    const user = await client.users.fetch(userId, { force: true });
+    const pg = user.primaryGuild;
+    return Boolean(pg && pg.identityGuildId === guildId && pg.identityEnabled !== false);
+  } catch {
+    return false;
+  }
+}
+
 // Picks up to `count` winners from `pool`, skipping anyone who has left the server.
 async function pickWinners(client, g, pool, count) {
   const winners = [];
@@ -180,6 +194,8 @@ async function pickWinners(client, g, pool, count) {
         if (err && err.code === 10007) continue;
       }
     }
+    // Tag-required giveaways: skip anyone who removed the tag after entering.
+    if (g.tagRequired && !(await hasServerTag(client, userId, g.guildId))) continue;
     winners.push(userId);
   }
   return winners;
@@ -266,26 +282,35 @@ function buildCreateModal() {
   return new ModalBuilder()
     .setCustomId(MODAL_ID)
     .setTitle("Create Giveaway")
-    .addComponents(
-      new ActionRowBuilder().addComponents(
+    .addLabelComponents(
+      new LabelBuilder().setLabel("Prize").setTextInputComponent(
         new TextInputBuilder()
-          .setCustomId("prize").setLabel("Prize")
+          .setCustomId("prize")
           .setStyle(TextInputStyle.Short).setMaxLength(100).setRequired(true)
       ),
-      new ActionRowBuilder().addComponents(
+      new LabelBuilder().setLabel("Time (1s, 1m, 1h, 1d, 1w)").setTextInputComponent(
         new TextInputBuilder()
-          .setCustomId("duration").setLabel("Time (1s, 1m, 1h, 1d, 1w)")
+          .setCustomId("duration")
           .setPlaceholder("e.g. 30m, 2h, 1d, 1w").setStyle(TextInputStyle.Short)
           .setMaxLength(30).setRequired(true)
       ),
-      new ActionRowBuilder().addComponents(
+      new LabelBuilder().setLabel("Number of winners").setTextInputComponent(
         new TextInputBuilder()
-          .setCustomId("winners").setLabel("Number of winners")
+          .setCustomId("winners")
           .setPlaceholder("1").setStyle(TextInputStyle.Short).setMaxLength(2).setRequired(true)
       ),
-      new ActionRowBuilder().addComponents(
+      new LabelBuilder().setLabel("Tag Required").setStringSelectMenuComponent(
+        new StringSelectMenuBuilder()
+          .setCustomId("tag_required")
+          .setPlaceholder("Select")
+          .addOptions(
+            { label: "No", value: "no", default: true },
+            { label: "Yes", value: "yes" }
+          )
+      ),
+      new LabelBuilder().setLabel("Description (optional)").setTextInputComponent(
         new TextInputBuilder()
-          .setCustomId("description").setLabel("Description (optional)")
+          .setCustomId("description")
           .setStyle(TextInputStyle.Paragraph).setMaxLength(1000).setRequired(false)
       )
     );
@@ -296,6 +321,14 @@ async function handleCreateSubmit(client, i) {
   const durationText = i.fields.getTextInputValue("duration");
   const winnersText = i.fields.getTextInputValue("winners").trim();
   const description = i.fields.getTextInputValue("description").trim();
+  let tagValue = "no";
+  try {
+    tagValue = (i.fields.getStringSelectValues("tag_required") || [])[0] || "no";
+  } catch {
+    const f = i.fields.getField("tag_required");
+    tagValue = (f && f.values && f.values[0]) || "no";
+  }
+  const tagRequired = tagValue === "yes";
 
   const duration = parseDuration(durationText);
   if (!duration) {
@@ -319,6 +352,7 @@ async function handleCreateSubmit(client, i) {
     description: description || null,
     hostId: i.user.id,
     winnerCount,
+    tagRequired,
     createdAt: Date.now(),
     endsAt: Date.now() + duration,
     ended: false,
@@ -354,6 +388,12 @@ async function handleEnter(client, i) {
 
   const idx = g.entries.indexOf(i.user.id);
   if (idx === -1) {
+    if (g.tagRequired && !(await hasServerTag(client, i.user.id, g.guildId))) {
+      return i.reply({
+        content: `This giveaway requires our **${TAG_NAME}** server tag. Equip it in your profile settings, then click Enter again.`,
+        flags: EPHEMERAL
+      });
+    }
     g.entries.push(i.user.id);
     save();
     scheduleRefresh(client, g);
